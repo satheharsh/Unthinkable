@@ -3,7 +3,7 @@
 import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Activity, LogOut, User } from "lucide-react";
+import { Activity, LogOut, Settings } from "lucide-react";
 
 export function Header() {
   const { data: session, status } = useSession();
@@ -28,6 +28,11 @@ export function Header() {
                 {session.user?.role}
               </span>
             </div>
+            <Link href="/settings">
+              <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-800" aria-label="Settings">
+                <Settings className="h-4 w-4" />
+              </Button>
+            </Link>
             <Button variant="ghost" size="sm" onClick={() => signOut({ callbackUrl: "/login" })} className="text-slate-500 hover:text-slate-800">
               <LogOut className="h-4 w-4 mr-2" />
               Logout
