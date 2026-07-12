@@ -72,9 +72,16 @@ export default function PatientDashboardPage() {
       animate={{ opacity: 1, y: 0 }}
       className="max-w-6xl mx-auto p-8 space-y-12"
     >
-      <div className="space-y-4">
-        <h1 className="text-4xl font-extrabold tracking-tight text-slate-800">Patient Portal</h1>
-        <p className="text-xl text-slate-500">Manage your appointments, health summaries, and prescriptions.</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-4">
+          <h1 className="text-4xl font-extrabold tracking-tight text-slate-800">Patient Portal</h1>
+          <p className="text-xl text-slate-500">Manage your appointments, health summaries, and prescriptions.</p>
+        </div>
+        <Link href="/patient/search">
+          <Button size="lg" className="bg-teal-600 hover:bg-teal-700 shadow-md h-12 px-6 rounded-full font-bold">
+            + Book New Appointment
+          </Button>
+        </Link>
       </div>
 
       {/* Custom Tabs Navigation */}

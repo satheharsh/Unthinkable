@@ -52,7 +52,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-[80vh] flex items-center justify-center p-4 bg-slate-50">
       <Card className="w-full max-w-md shadow-xl border-slate-200">
-        <CardHeader className="text-center space-y-4 pb-8">
+        <CardHeader className="text-center space-y-4 pb-4">
           <div className="mx-auto bg-teal-100 w-16 h-16 rounded-full flex items-center justify-center mb-2">
             <Activity className="h-8 w-8 text-teal-600" />
           </div>
@@ -60,6 +60,11 @@ export default function LoginPage() {
           <p className="text-slate-500">Sign in to access your HealthSync account</p>
         </CardHeader>
         <CardContent>
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800 font-medium text-center">
+              <strong>Demo Mode:</strong> Please click one of the buttons below to load a prototype account, then click "Sign In".
+            </p>
+          </div>
           <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-700">Email</label>
@@ -89,17 +94,17 @@ export default function LoginPage() {
           </form>
           
           <div className="mt-8 pt-6 border-t border-slate-100">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider text-center mb-4">
-              Prototype Test Accounts
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider text-center mb-4">
+              1. Click a role to load credentials
             </p>
-            <div className="grid gap-2">
-              <Button variant="outline" size="sm" onClick={() => fillCredentials("patient@example.com")}>
+            <div className="grid gap-3">
+              <Button type="button" variant="outline" className="border-teal-200 hover:bg-teal-50 hover:text-teal-700" onClick={() => fillCredentials("patient@example.com")}>
                 Load Patient Demo
               </Button>
-              <Button variant="outline" size="sm" onClick={() => fillCredentials("doctor@example.com")}>
+              <Button type="button" variant="outline" className="border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700" onClick={() => fillCredentials("doctor@example.com")}>
                 Load Doctor Demo
               </Button>
-              <Button variant="outline" size="sm" onClick={() => fillCredentials("admin@example.com")}>
+              <Button type="button" variant="outline" className="border-amber-200 hover:bg-amber-50 hover:text-amber-700" onClick={() => fillCredentials("admin@example.com")}>
                 Load Admin Demo
               </Button>
             </div>
