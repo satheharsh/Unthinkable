@@ -8,7 +8,7 @@ import { Calendar, Video, FileText, Pill, Clock, Activity, CheckCircle2, Chevron
 import Link from "next/link";
 import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/hooks/use-auth";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -51,7 +51,8 @@ export default function PatientDashboardPage() {
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
   const [selectedPastVisit, setSelectedPastVisit] = useState<typeof pastSummaries[0] | null>(null);
 
-  const { isAuthenticated } = useAuth();
+  const { status } = useSession();
+  const isAuthenticated = status === "authenticated";
   const router = useRouter();
 
   // Medication states

@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Calendar, Clock, CheckCircle2, AlertCircle } from "lucide-react";
-import Link from "next/link";
 import { toast } from "sonner";
+import { useSearchParams } from "next/navigation";
 
 // Mock data
 const mockSlots = [
@@ -17,31 +16,40 @@ const mockSlots = [
 ];
 
 export default function BookingWizardPage({ params }: { params: { doctorId: string } }) {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">Loading booking wizard...</div>}>
+      <BookingWizardContent doctorId={params.doctorId} />
+    </Suspense>
+  );
+}
+
+function BookingWizardContent({ doctorId }: { doctorId: string }) {
   const [step, setStep] = useState(1);
   const [selectedSlot, setSelectedSlot] = useState<any>(null);
-  const [symptoms, setSymptoms] = useState("");
   const [countdown, setCountdown] = useState(300); // 5 minutes in seconds
   const [isHolding, setIsHolding] = useState(false);
+  
+  const searchParams = useSearchParams();
+  const symptoms = searchParams.get("symptoms") || "No symptoms provided.";
 
-  // Timer logic for Step 3
+  // Timer logic for Step 2
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    if (step === 3 && countdown > 0) {
+    if (step === 2 && countdown > 0) {
       timer = setInterval(() => setCountdown((c) => c - 1), 1000);
     }
     return () => clearInterval(timer);
   }, [step, countdown]);
 
-  const handleNext = () => setStep((s) => s + 1);
-  const handleBack = () => setStep((s) => s - 1);
-
   const handleHoldSlot = async () => {
     setIsHolding(true);
-    // Simulate DB Slot Hold (Phase 1)
+    // Simulate DB Slot Hold
     await new Promise((resolve) => setTimeout(resolve, 800));
     setIsHolding(false);
-    handleNext(); // Go to step 3
+    setStep(2);
   };
+
+  const handleBack = () => setStep((s) => s - 1);
 
   const handleConfirm = async () => {
     toast.success("Appointment successfully booked!");
@@ -68,9 +76,7 @@ export default function BookingWizardPage({ params }: { params: { doctorId: stri
         <div className="flex items-center space-x-3 text-sm text-slate-500">
           <span className={`${step >= 1 ? 'text-teal-600 font-bold' : ''}`}>1. Select Time</span>
           <span>&gt;</span>
-          <span className={`${step >= 2 ? 'text-teal-600 font-bold' : ''}`}>2. Intake Form</span>
-          <span>&gt;</span>
-          <span className={`${step >= 3 ? 'text-teal-600 font-bold' : ''}`}>3. Confirm</span>
+          <span className={`${step >= 2 ? 'text-teal-600 font-bold' : ''}`}>2. Confirm</span>
         </div>
       </div>
 
@@ -114,8 +120,8 @@ export default function BookingWizardPage({ params }: { params: { doctorId: stri
                     ))}
                   </div>
                   <div className="pt-8 flex justify-end">
-                    <Button size="lg" onClick={handleNext} disabled={!selectedSlot}>
-                      Continue
+                    <Button size="lg" onClick={handleHoldSlot} disabled={!selectedSlot || isHolding}>
+                      {isHolding ? "Securing Slot..." : "Continue"}
                     </Button>
                   </div>
                 </CardContent>
@@ -126,45 +132,6 @@ export default function BookingWizardPage({ params }: { params: { doctorId: stri
           {step === 2 && (
             <motion.div
               key="step2"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-slate-800">Symptom Intake</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <p className="text-slate-500">
-                    Please describe the reason for your visit. This helps the doctor prepare beforehand.
-                  </p>
-                  <div className="space-y-2">
-                    <label htmlFor="symptoms-textarea" className="text-sm font-medium text-slate-700">
-                      Your Symptoms
-                    </label>
-                    <Textarea
-                      id="symptoms-textarea"
-                      placeholder="E.g., I have been experiencing a mild fever and headache for the past 2 days..."
-                      className="min-h-[160px] text-base"
-                      value={symptoms}
-                      onChange={(e) => setSymptoms(e.target.value)}
-                    />
-                  </div>
-                  <div className="pt-8 flex justify-between">
-                    <Button variant="outline" size="lg" onClick={handleBack}>Back</Button>
-                    <Button size="lg" onClick={handleHoldSlot} disabled={!symptoms.trim() || isHolding}>
-                      {isHolding ? "Securing Slot..." : "Review & Book"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          )}
-
-          {step === 3 && (
-            <motion.div
-              key="step3"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
