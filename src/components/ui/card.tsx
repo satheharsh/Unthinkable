@@ -1,5 +1,44 @@
 import * as React from "react"
-export const Card = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} style={{ border: '1px solid #e5e7eb', padding: '1.5rem', borderRadius: '12px', marginBottom: '1rem', background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }} {...props} />
-export const CardHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} style={{ marginBottom: '1rem' }} {...props} />
-export const CardTitle = ({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => <h3 className={className} style={{ fontSize: '1.25rem', fontWeight: '600', margin: 0 }} {...props} />
-export const CardContent = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} {...props} />
+import { cn } from "@/lib/utils"
+
+const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn("rounded-xl border border-slate-200 bg-white text-slate-950 shadow-md", className)}
+      {...props}
+    />
+  )
+)
+Card.displayName = "Card"
+
+const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn("flex flex-col space-y-1.5 p-6", className)}
+      {...props}
+    />
+  )
+)
+CardHeader.displayName = "CardHeader"
+
+const CardTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLHeadingElement>>(
+  ({ className, ...props }, ref) => (
+    <h3
+      ref={ref}
+      className={cn("text-2xl font-semibold leading-none tracking-tight text-slate-800", className)}
+      {...props}
+    />
+  )
+)
+CardTitle.displayName = "CardTitle"
+
+const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+  )
+)
+CardContent.displayName = "CardContent"
+
+export { Card, CardHeader, CardTitle, CardContent }
