@@ -58,6 +58,8 @@ export async function validateWaitlistClaim(waitlistId: string) {
   const entry = await prisma.waitlist.findUnique({ where: { id: waitlistId } });
   if (!entry || !entry.notifiedAt) return false;
   
+
+  
   const now = new Date();
   const expiryTime = new Date(entry.notifiedAt.getTime() + EXPIRY_HOURS * 60 * 60 * 1000);
   

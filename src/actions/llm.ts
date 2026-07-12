@@ -5,7 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import { PreVisitSummarySchema, PostVisitSummarySchema } from '@/lib/validations';
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY || 'dummy_key_for_build',
 });
 const prisma = new PrismaClient();
 
@@ -87,7 +87,7 @@ export async function generatePostVisitSummary(appointmentId: string, doctorNote
     const completionPromise = openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'You are a medical assistant. Create a structured post-visit summary from the doctor\\'s notes.' },
+        { role: 'system', content: "You are a medical assistant. Create a structured post-visit summary from the doctor's notes." },
         { role: 'user', content: doctorNotes }
       ],
     });
@@ -118,7 +118,7 @@ export async function generatePostVisitSummary(appointmentId: string, doctorNote
       data: { aiSummaryFailed: true }
     });
     
-    await prisma.lMSummary.upsert({
+    await prisma.lLMSummary.upsert({
       where: { appointmentId },
       create: {
         appointmentId,

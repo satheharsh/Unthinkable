@@ -3,8 +3,8 @@ import { PrismaClient } from '@prisma/client';
 import { Resend } from 'resend';
 
 const prisma = new PrismaClient();
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM_EMAIL = 'appointments@healthcareapp.com';
+const resend = new Resend(process.env.RESEND_API_KEY || 'dummy_key_for_build');
+const FROM_EMAIL = 'notifications@healthsync.com';
 
 /**
  * Cron Job: Runs daily (e.g., 08:00 AM)
