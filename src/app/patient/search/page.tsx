@@ -64,7 +64,7 @@ export default function DoctorSearchPage() {
                       : <span className="text-orange-500 font-medium">Waitlist available</span>}
                   </div>
                 </div>
-                <Link href={\`/patient/book/\${doc.id}\`}>
+                <Link href={`/patient/book/${doc.id}`}>
                   <Button variant={doc.availableSlots > 0 ? "default" : "secondary"}>
                     {doc.availableSlots > 0 ? "Book Appointment" : "View Schedule"}
                   </Button>

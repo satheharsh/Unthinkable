@@ -21,7 +21,7 @@ export default function DoctorDashboardPage() {
       
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {todaysAppointments.map((appt) => (
-          <Card key={appt.id} className={\`transition-shadow hover:shadow-md \${appt.status === 'ON_HOLD' ? 'opacity-70' : ''}\`}>
+          <Card key={appt.id} className={`transition-shadow hover:shadow-md ${appt.status === 'ON_HOLD' ? 'opacity-70' : ''}`}>
             <CardHeader className="pb-2 border-b bg-muted/20">
               <CardTitle className="text-lg flex items-center space-x-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
@@ -33,12 +33,12 @@ export default function DoctorDashboardPage() {
               <div className="flex justify-between items-end">
                 <div className="space-y-1">
                   <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Status</span>
-                  <span className={\`text-sm font-medium \${appt.status === 'BOOKED' ? 'text-green-600' : 'text-yellow-600'}\`}>
+                  <span className={`text-sm font-medium ${appt.status === 'BOOKED' ? 'text-green-600' : 'text-yellow-600'}`}>
                     {appt.status}
                   </span>
                 </div>
                 {appt.status === 'BOOKED' && (
-                  <Link href={\`/doctor/appointment/\${appt.id}\`}>
+                  <Link href={`/doctor/appointment/${appt.id}`}>
                     <Button>
                       <Video className="mr-2 h-4 w-4" />
                       View Details

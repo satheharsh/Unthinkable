@@ -86,7 +86,7 @@ export default function AppointmentDetailPage({ params }: { params: { id: string
               </CardContent>
             </Card>
           ) : (
-            <Card className={\`border-2 transition-colors \${summaryCardClass}\`}>
+            <Card className={`border-2 transition-colors ${summaryCardClass}`}>
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg flex items-center justify-between">
                   <span>AI Pre-Visit Summary</span>

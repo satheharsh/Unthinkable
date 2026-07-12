@@ -62,11 +62,11 @@ export default function BookingWizardPage({ params }: { params: { doctorId: stri
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight mb-2">Book Appointment</h1>
         <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-          <span className={\`\${step >= 1 ? 'text-primary font-medium' : ''}\`}>1. Select Time</span>
+          <span className={`${step >= 1 ? 'text-primary font-medium' : ''}`}>1. Select Time</span>
           <span>&gt;</span>
-          <span className={\`\${step >= 2 ? 'text-primary font-medium' : ''}\`}>2. Intake Form</span>
+          <span className={`${step >= 2 ? 'text-primary font-medium' : ''}`}>2. Intake Form</span>
           <span>&gt;</span>
-          <span className={\`\${step >= 3 ? 'text-primary font-medium' : ''}\`}>3. Confirm</span>
+          <span className={`${step >= 3 ? 'text-primary font-medium' : ''}`}>3. Confirm</span>
         </div>
       </div>
 
@@ -93,7 +93,7 @@ export default function BookingWizardPage({ params }: { params: { doctorId: stri
                       <div key={slot.id} className="flex flex-col space-y-2">
                         <Button
                           variant={selectedSlot?.id === slot.id ? "default" : "outline"}
-                          className={\`w-full \${slot.status === 'BOOKED' ? 'opacity-50' : ''}\`}
+                          className={`w-full ${slot.status === 'BOOKED' ? 'opacity-50' : ''}`}
                           disabled={slot.status === 'BOOKED'}
                           onClick={() => setSelectedSlot(slot)}
                         >
