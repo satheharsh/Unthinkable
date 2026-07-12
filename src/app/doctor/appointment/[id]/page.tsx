@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,6 +24,19 @@ export default function AppointmentDetailPage({ params }: { params: { id: string
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [postVisitSummary, setPostVisitSummary] = useState("");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+
+  useEffect(() => {
+    if (notes === "") return;
+    
+    setSaveStatus("saving");
+    const timeoutId = setTimeout(() => {
+      // Mock API call to save notes
+      setSaveStatus("saved");
+    }, 1000);
+
+    return () => clearTimeout(timeoutId);
+  }, [notes]);
 
   // Determine urgency from the AI Summary text (mock implementation)
   const isHighUrgency = mockAppointment.llmSummary?.includes("URGENCY: HIGH");
@@ -103,7 +116,13 @@ export default function AppointmentDetailPage({ params }: { params: { id: string
 
         {/* Post-Visit Actions */}
         <div className="space-y-4">
-          <h2 className="text-2xl font-semibold tracking-tight">Post-Visit Notes</h2>
+          <div className="flex justify-between items-end">
+            <h2 className="text-2xl font-semibold tracking-tight">Post-Visit Notes</h2>
+            <span className={`text-sm font-medium transition-opacity ${saveStatus === 'idle' ? 'opacity-0' : 'opacity-100'} ${saveStatus === 'saved' ? 'text-emerald-600' : 'text-slate-400'}`}>
+              {saveStatus === 'saving' && 'Saving...'}
+              {saveStatus === 'saved' && 'All changes saved'}
+            </span>
+          </div>
           <Card className="shadow-sm">
             <CardContent className="pt-6 space-y-4">
               <Textarea 

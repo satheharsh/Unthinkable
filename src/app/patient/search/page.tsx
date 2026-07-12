@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, UserCircle, Star } from "lucide-react";
-import Link from "next/link";
 import { motion } from "framer-motion";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/hooks/use-auth";
+import { useRouter } from "next/navigation";
 
 const mockDoctors = [
   { id: "1", name: "Dr. Sarah Smith", specialization: "Cardiology", rating: 4.9, availableSlots: 3 },
@@ -17,11 +19,31 @@ const mockDoctors = [
 
 export default function DoctorSearchPage() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const { isAuthenticated } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    // Mock network request delay
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, []);
 
   const filteredDoctors = mockDoctors.filter((doc) =>
     doc.specialization.toLowerCase().includes(searchTerm.toLowerCase()) ||
     doc.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleBookClick = (e: React.MouseEvent, docId: string) => {
+    e.preventDefault();
+    if (!isAuthenticated) {
+      router.push("/login");
+    } else {
+      router.push(`/patient/book/${docId}`);
+    }
+  };
 
   return (
     <motion.div 
@@ -49,49 +71,77 @@ export default function DoctorSearchPage() {
       </div>
 
       <div className="grid gap-8 md:grid-cols-2">
-        {filteredDoctors.map((doc, index) => (
-          <motion.div 
-            key={doc.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
-          >
-            <Card className="transition-all hover:shadow-lg hover:border-teal-500">
+        {isLoading ? (
+          // Loading Skeletons
+          Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="border-slate-100 shadow-sm">
               <CardHeader className="flex flex-row items-center gap-4 pb-2">
-                <UserCircle className="h-12 w-12 text-slate-400" aria-hidden="true" />
-                <div>
-                  <CardTitle className="text-xl text-slate-800">{doc.name}</CardTitle>
-                  <p className="text-sm font-medium text-teal-600">{doc.specialization}</p>
+                <Skeleton className="h-12 w-12 rounded-full" />
+                <div className="space-y-2">
+                  <Skeleton className="h-6 w-32" />
+                  <Skeleton className="h-4 w-24" />
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="flex justify-between items-end mt-6">
                   <div className="space-y-2">
-                    <div className="flex items-center text-sm text-amber-600 font-medium">
-                      <Star className="h-4 w-4 mr-1 fill-current" aria-hidden="true" />
-                      {doc.rating} Ratings
-                    </div>
-                    <div className="text-sm">
-                      {doc.availableSlots > 0 
-                        ? <span className="text-emerald-600 font-medium">{doc.availableSlots} slots available today</span>
-                        : <span className="text-amber-500 font-medium">Waitlist available</span>}
-                    </div>
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-32" />
                   </div>
-                  <Link href={`/patient/book/${doc.id}`}>
-                    <Button variant={doc.availableSlots > 0 ? "default" : "secondary"}>
-                      {doc.availableSlots > 0 ? "Book Appointment" : "View Schedule"}
-                    </Button>
-                  </Link>
+                  <Skeleton className="h-11 w-36 rounded-md" />
                 </div>
               </CardContent>
             </Card>
-          </motion.div>
-        ))}
+          ))
+        ) : (
+          <>
+            {filteredDoctors.map((doc, index) => (
+              <motion.div 
+                key={doc.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+              >
+                <Card className="transition-all hover:shadow-lg hover:border-teal-500">
+                  <CardHeader className="flex flex-row items-center gap-4 pb-2">
+                    <UserCircle className="h-12 w-12 text-slate-400" aria-hidden="true" />
+                    <div>
+                      <CardTitle className="text-xl text-slate-800">{doc.name}</CardTitle>
+                      <p className="text-sm font-medium text-teal-600">{doc.specialization}</p>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex justify-between items-end mt-6">
+                      <div className="space-y-2">
+                        <div className="flex items-center text-sm text-amber-600 font-medium">
+                          <Star className="h-4 w-4 mr-1 fill-current" aria-hidden="true" />
+                          {doc.rating} Ratings
+                        </div>
+                        <div className="text-sm">
+                          {doc.availableSlots > 0 
+                            ? <span className="text-emerald-600 font-medium">{doc.availableSlots} slots available today</span>
+                            : <span className="text-amber-500 font-medium">Waitlist available</span>}
+                        </div>
+                      </div>
+                      <Button 
+                        size="lg"
+                        variant={doc.availableSlots > 0 ? "default" : "secondary"}
+                        onClick={(e) => handleBookClick(e, doc.id)}
+                      >
+                        {doc.availableSlots > 0 ? "Book Appointment" : "View Schedule"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
 
-        {filteredDoctors.length === 0 && (
-          <div className="col-span-full text-center py-12 text-slate-500 text-lg">
-            No doctors found matching "{searchTerm}".
-          </div>
+            {!isLoading && filteredDoctors.length === 0 && (
+              <div className="col-span-full text-center py-12 text-slate-500 text-lg">
+                No doctors found matching "{searchTerm}".
+              </div>
+            )}
+          </>
         )}
       </div>
     </motion.div>
