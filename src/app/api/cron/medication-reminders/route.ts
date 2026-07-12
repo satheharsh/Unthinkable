@@ -39,20 +39,20 @@ export async function GET(request: Request) {
       if (!meds || !Array.isArray(meds) || meds.length === 0) continue;
 
       // Format medications into an HTML list
-      const medsHtml = meds.map(m => \`<li><strong>\${m.medicationName}:</strong> \${m.instructions}</li>\`).join('');
+      const medsHtml = meds.map(m => `<li><strong>${m.medicationName}:</strong> ${m.instructions}</li>`).join('');
 
       await resend.emails.send({
         from: FROM_EMAIL,
         to: patient.email,
         subject: 'Daily Medication Reminder',
-        html: \`
-          <h2>Hello \${patient.name},</h2>
+        html: `
+          <h2>Hello ${patient.name},</h2>
           <p>This is your automated daily reminder to take your prescribed medications:</p>
           <ul style="background: #f8f9fa; padding: 20px; border-radius: 5px;">
-            \${medsHtml}
+            ${medsHtml}
           </ul>
           <p>Stay healthy!</p>
-        \`,
+        `,
       });
       emailsSent++;
     }

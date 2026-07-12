@@ -10,7 +10,7 @@ const prisma = new PrismaClient();
  */
 export async function GET(request: Request) {
   // Authentication check would go here for Vercel Cron
-  // if (request.headers.get('Authorization') !== \`Bearer \${process.env.CRON_SECRET}\`) {
+  // if (request.headers.get('Authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
   //   return new NextResponse('Unauthorized', { status: 401 });
   // }
 

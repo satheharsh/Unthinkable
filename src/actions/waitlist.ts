@@ -40,7 +40,7 @@ export async function processWaitlistForCancelledSlot(appointmentId: string) {
 
   // 3. Generate a secure, expiring link
   // (In a real app, this could also use JWTs, but we rely on DB validation of notifiedAt)
-  const secureLink = \`\${process.env.NEXT_PUBLIC_APP_URL}/patient/book/\${waitlistEntry.appointment.doctorId}?waitlistClaim=\${waitlistEntry.id}\`;
+  const secureLink = `${process.env.NEXT_PUBLIC_APP_URL}/patient/book/${waitlistEntry.appointment.doctorId}?waitlistClaim=${waitlistEntry.id}`;
 
   // 4. Send email
   await sendWaitlistOpenedEmail(
