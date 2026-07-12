@@ -20,6 +20,7 @@ export default withAuth(
     }
   },
   {
+    secret: process.env.NEXTAUTH_SECRET || "default_secret_for_development",
     callbacks: {
       authorized: ({ token }) => !!token,
     },
