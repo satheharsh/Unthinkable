@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+enum AppointmentStatus {
+  AVAILABLE
+  ON_HOLD
+  BOOKED
+  CANCELLED
+}
+
+model User {
+  id                  String        @id @default(uuid())
+  email               String        @unique
+  name                String
+  role                Role          @default(PATIENT)
+  specialization      String?
+  
+  patientAppointments Appointment[] @relation("PatientAppointments")
+  doctorAppointments  Appointment[] @relation("DoctorAppointments")
+  
+  waitlists           Waitlist[]
+  leaves              DoctorLeave[]
+  
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+}
+
+model Appointment {
+  id              String            @id @default(uuid())
+  patientId       String?
+  patient         User?             @relation("PatientAppointments", fields: [patientId], references: [id])
+  
+  doctorId        String
+  doctor          User              @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  
+  slotTime        DateTime
+  status          AppointmentStatus @default(AVAILABLE)
+  holdExpiresAt   DateTime?
+  meetLink        String?
+  calendarEventId String?
+  symptoms        String?
+  aiSummaryFailed Boolean           @default(false)
+  
+  llmSummary      LLMSummary?
+  waitlistEntries Waitlist[]
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  // Prevents double booking at DB schema level if slots are predefined
+  @@unique([doctorId, slotTime]) 
+}
+
+model LLMSummary {
+  id             String       @id @default(uuid())
+  appointmentId  String       @unique
+  appointment    Appointment  @relation(fields: [appointmentId], references: [id])
+  summaryText    String       @db.Text
+  medicationSchedule Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Waitlist {
+  id             String       @id @default(uuid())
+  appointmentId  String
+  appointment    Appointment  @relation(fields: [appointmentId], references: [id])
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  notified       Boolean      @default(false)
+  notifiedAt     DateTime?
+  
+  createdAt      DateTime     @default(now())
+
+  // A user can only be on the waitlist for a specific appointment slot once
+  @@unique([appointmentId, userId])
+}
+
+model DoctorLeave {
+  id             String       @id @default(uuid())
+  doctorId       String
+  doctor         User         @relation(fields: [doctorId], references: [id])
+  startTime      DateTime
+  endTime        DateTime
+  reason         String?
+  
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
