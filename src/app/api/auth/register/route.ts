@@ -29,18 +29,8 @@ export async function POST(req: Request) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email: email.toLowerCase(),
-        password: hashedPassword,
-        role: assignedRole,
-      },
-    });
-
     if (assignedRole === "DOCTOR") {
-      // Generate a Stripe Checkout Session for the $99.00 setup fee
+      // Defer user creation for doctors. Store details in Stripe session metadata.
       const origin = req.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
       
       const session = await stripe.checkout.sessions.create({
@@ -59,20 +49,31 @@ export async function POST(req: Request) {
             quantity: 1,
           },
         ],
-        success_url: `${origin}/login?registered=true&session_id={CHECKOUT_SESSION_ID}`,
+        success_url: `${origin}/api/stripe/callback?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${origin}/register?canceled=true`,
         metadata: {
-          userId: user.id,
-          role: user.role,
+          name,
+          email: email.toLowerCase(),
+          hashedPassword,
+          role: assignedRole,
         },
       });
 
       return NextResponse.json({ 
-        message: "User created. Redirecting to payment.", 
-        user: { id: user.id, email: user.email },
+        message: "Redirecting to payment.", 
         checkoutUrl: session.url 
       }, { status: 201 });
     }
+
+    // Immediately create user for PATIENT role
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email: email.toLowerCase(),
+        password: hashedPassword,
+        role: assignedRole,
+      },
+    });
 
     return NextResponse.json({ message: "User created successfully", user: { id: user.id, email: user.email } }, { status: 201 });
   } catch (error) {
