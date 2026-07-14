@@ -4,9 +4,8 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("Starting database seed...");
+  console.log("Starting historical database seed...");
 
-  // Generate a standard password hash for all users
   const passwordHash = await bcrypt.hash("password123", 10);
 
   // 1. Seed Admins (3)
@@ -15,9 +14,7 @@ async function main() {
     const email = `admin${i}@healthsync.com`;
     const admin = await prisma.user.upsert({
       where: { email },
-      update: {
-        password: passwordHash,
-      },
+      update: { password: passwordHash },
       create: {
         email,
         name: `System Admin ${i}`,
@@ -35,7 +32,6 @@ async function main() {
     "Dermatology", "Orthopedics", "Psychiatry", "Oncology",
     "Endocrinology", "Gastroenterology"
   ];
-
   const doctors = [];
   for (let i = 1; i <= 30; i++) {
     const spec = specializations[i % specializations.length];
@@ -70,9 +66,7 @@ async function main() {
     const email = `patient${i}@example.com`;
     const patient = await prisma.user.upsert({
       where: { email },
-      update: {
-        password: passwordHash,
-      },
+      update: { password: passwordHash },
       create: {
         email,
         name: `Patient Name ${i}`,
@@ -84,80 +78,114 @@ async function main() {
   }
   console.log(`✓ Seeded ${patients.length} Patients`);
 
-  const now = new Date();
-  
-  // Clean up existing appointments to avoid cluttering unique constraints during rapid seeding
-  // Using deleteMany because appointments are unique per doctor/time and don't have a reliable upsert key without querying
-  console.log("Cleaning up old mock appointments...");
+  console.log("Cleaning up old mock data...");
+  await prisma.auditLog.deleteMany({});
   await prisma.waitlist.deleteMany({});
   await prisma.lLMSummary.deleteMany({});
   await prisma.appointment.deleteMany({});
 
-  // 4. Seed Appointments
+  // 4. Seed Historical Appointments (Jan 2025 to July 2026)
+  let pastCount = 0;
   
-  // --- 15 Past Appointments ---
-  for (let i = 0; i < 15; i++) {
+  // Starting Jan 1, 2025
+  let currentDate = new Date('2025-01-01T09:00:00Z');
+  const now = new Date(); 
+
+  for (let i = 1; i <= 300; i++) {
     const doc = doctors[i % doctors.length];
     const pat = patients[i % patients.length];
-    const pastDate = new Date(now);
-    pastDate.setDate(now.getDate() - (i % 5 + 1)); // 1-5 days ago
-    pastDate.setHours(9 + (i % 7), 0, 0, 0); // between 09:00 and 15:00
+    
+    // Advance date by 1-2 days
+    currentDate.setDate(currentDate.getDate() + (i % 3 === 0 ? 2 : 1));
+    currentDate.setHours(9 + (i % 7), (i % 2) * 30, 0, 0); 
+    
+    if (currentDate > now) {
+      break;
+    }
 
-    const preVisitSummary = `Urgency level: Low\nChief complaint: Checkup for mild symptoms\nQuestions for doctor:\n1. Is this normal?`;
+    const apptId = `historic-appt-${i}`;
+    
+    const preVisitSummary = `Urgency level: Low\nChief complaint: Follow-up visit.\nQuestions for doctor:\n1. Is this normal?`;
     const docNotes = `Patient presented with mild symptoms. Vitals stable. Advised rest and hydration. Prescribed Amoxicillin 500mg: Take 1 tablet twice daily.`;
     const postVisitSummary = `Visit summary:\nPatient presented with mild symptoms. Vitals stable.\n\nMedication schedule:\nAmoxicillin 500mg: Take 1 tablet twice daily.\n\nFollow-up steps:\nRest and hydrate.`;
     const medSchedule = [
       { id: `med-${i}`, name: "Amoxicillin 500mg", instructions: "Take 1 tablet twice daily" }
     ];
 
-    await prisma.appointment.create({
-      data: {
+    await prisma.appointment.upsert({
+      where: { id: apptId },
+      update: {},
+      create: {
+        id: apptId,
         doctorId: doc.id,
         patientId: pat.id,
-        slotTime: pastDate,
+        slotTime: currentDate,
         status: AppointmentStatus.BOOKED,
         symptoms: "Mild symptoms",
         preVisitSummary,
         doctorNotes: docNotes,
         postVisitSummary,
         aiSummaryFailed: false,
-        llmSummary: {
-          create: {
-            summaryText: postVisitSummary,
-            medicationSchedule: medSchedule,
-          }
-        }
+        createdAt: currentDate, // Time travel mapping
+        updatedAt: currentDate,
       },
     });
+
+    await prisma.lLMSummary.upsert({
+      where: { appointmentId: apptId },
+      update: {},
+      create: {
+        appointmentId: apptId,
+        summaryText: postVisitSummary,
+        medicationSchedule: medSchedule,
+        createdAt: currentDate, 
+        updatedAt: currentDate,
+      }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        id: `audit-${apptId}`,
+        userId: doc.id,
+        patientId: pat.id,
+        action: "COMPLETED_APPOINTMENT_SUMMARY",
+        details: `Doctor completed visit for patient ${pat.id}`,
+        createdAt: currentDate,
+      }
+    });
+
+    pastCount++;
   }
-  console.log("✓ Seeded 15 Past Appointments with LLM Summaries");
+  console.log(`✓ Seeded ${pastCount} Historical Appointments (2025 - 2026) with LLMSummaries and AuditLogs`);
 
   // --- 20 Future Appointments (Clustered Today and Tomorrow) ---
   for (let i = 0; i < 20; i++) {
-    const doc = doctors[i % 5]; // Cluster them around the first 5 doctors to make their schedules look busy
+    const doc = doctors[i % 5];
     const pat = patients[(i + 15) % patients.length];
     
     const futureDate = new Date(now);
-    // 0 = today, 1 = tomorrow
     const daysAhead = i < 10 ? 0 : 1;
     futureDate.setDate(now.getDate() + daysAhead);
-    // Times between 09:00 and 16:30
     const hour = 9 + (Math.floor(i / 2) % 7);
     const minute = (i % 2) * 30;
     futureDate.setHours(hour, minute, 0, 0);
 
-    // Skip if it's today and the time has already passed
     if (daysAhead === 0 && futureDate < now) {
-      futureDate.setDate(futureDate.getDate() + 2); // Push to day after tomorrow
+      futureDate.setDate(futureDate.getDate() + 2);
     }
 
-    await prisma.appointment.create({
-      data: {
+    const apptId = `future-appt-${i}`;
+
+    await prisma.appointment.upsert({
+      where: { id: apptId },
+      update: {},
+      create: {
+        id: apptId,
         doctorId: doc.id,
         patientId: pat.id,
         slotTime: futureDate,
         status: AppointmentStatus.BOOKED,
-        symptoms: "Routine follow-up or specific complaint.",
+        symptoms: "Routine checkup.",
         preVisitSummary: "Urgency level: Low\nChief complaint: Routine check.",
         meetLink: `https://meet.google.com/mock-${i}`,
       },
@@ -165,29 +193,7 @@ async function main() {
   }
   console.log("✓ Seeded 20 Future Appointments");
 
-  // --- 5 ON_HOLD Appointments ---
-  for (let i = 0; i < 5; i++) {
-    const doc = doctors[(i + 5) % doctors.length];
-    
-    const holdDate = new Date(now);
-    holdDate.setDate(now.getDate() + 3); // 3 days ahead
-    holdDate.setHours(10 + i, 30, 0, 0);
-
-    const expiresAt = new Date(now);
-    expiresAt.setMinutes(expiresAt.getMinutes() + 5);
-
-    await prisma.appointment.create({
-      data: {
-        doctorId: doc.id,
-        slotTime: holdDate,
-        status: AppointmentStatus.ON_HOLD,
-        holdExpiresAt: expiresAt,
-      },
-    });
-  }
-  console.log("✓ Seeded 5 ON_HOLD Appointments");
-
-  console.log("Database seed completed successfully.");
+  console.log("Historical Database Seed completed successfully.");
 }
 
 main()
