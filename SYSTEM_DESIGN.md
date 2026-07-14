@@ -1,60 +1,80 @@
-# HealthSync: System Design Document
+# HealthSync System Design & Architecture
 
-This document outlines the architectural decisions, database interaction patterns, and fail-safe mechanisms implemented within the HealthSync platform. The architecture emphasizes data integrity, concurrency management, and robust error handling to deliver a professional, enterprise-grade healthcare scheduling system.
+## Overview
+This document outlines the core backend architecture and system design patterns utilized within the HealthSync application. HealthSync is built on Next.js 14 App Router, utilizing Server Actions for direct database mutations, Prisma as the ORM mapping to PostgreSQL, and a combination of background cron jobs and transactional webhooks for async processing. 
 
----
-
-## 1. Concurrency Management: Double-Booking Prevention & Slot Hold Mechanism
-
-One of the most critical requirements of a healthcare scheduling platform is the absolute prevention of double-booking. When multiple patients attempt to book the same appointment slot simultaneously, the system must guarantee that only one transaction succeeds.
-
-### The Slot Hold Architecture
-To provide a smooth user experience, HealthSync employs a two-phase booking approach. When a patient begins the checkout process, the system places a temporary 5-minute "Hold" on the selected slot. 
-
-This is achieved using **Prisma Database Transactions** paired with **Raw SQL Row-Level Locks**:
-
-1. **Row-Level Locking:** Inside the Prisma `$transaction` block, the system executes a raw SQL query using `SELECT ... FOR UPDATE`. This exclusive lock tells the PostgreSQL database to block any concurrent transactions attempting to read or modify that specific row until the current transaction completes.
-2. **State Transition:** If the slot is verified as `AVAILABLE`, the transaction updates the status to `ON_HOLD` and assigns a `holdExpiresAt` timestamp (current time + 5 minutes). 
-3. **Checkout Finalization:** The patient is then routed to the Secure Copay Checkout screen. During this 5-minute window, the UI displays a countdown timer. Other users querying the schedule will see the slot omitted from the dynamic list because it is no longer marked `AVAILABLE`.
-4. **Resolution:** Upon successful simulated Stripe payment, the slot transitions to `BOOKED`. If the countdown expires before checkout completion, an automated background cron job sweeps the database and reverts expired `ON_HOLD` slots back to `AVAILABLE`.
-
-By enforcing these constraints at the database level rather than the application level, HealthSync is immune to race conditions that typically plague high-traffic booking systems.
+The primary architectural goals of this system are data integrity, high availability, concurrency safety, and patient communication reliability. This write-up specifically details how the application handles scheduling concurrency, doctor leaves, temporary locks, and fault-tolerant notifications.
 
 ---
 
-## 2. Dynamic Scheduling: Doctor Leave Conflict Handling
+## 1. Double-Booking Prevention & Concurrency Control
 
-Doctors require flexible schedules. Hardcoding available slots is insufficient for a real-world application. HealthSync implements a dynamic slot generation algorithm that reconciles a doctor's standard working hours against real-time appointments and unexpected leaves of absence.
+In any healthcare scheduling system, the most critical vulnerability is the "double-booking" race condition, where two patients attempt to book the same time slot for the same doctor simultaneously. HealthSync mitigates this risk at the database level utilizing a combination of ACID transactions and precise query constraints.
 
-### The `generateAvailableSlots` Utility
-When a patient views a doctor's availability for a specific day, the `/api/doctors/[id]/slots` endpoint invokes the `generateAvailableSlots` utility. This function performs the following reconciliations:
+### The Problem
+If Patient A and Patient B both load the booking page, they both see the `09:00 AM` slot as `AVAILABLE`. If they both click "Book" at the exact same millisecond, a naive implementation would simply read the status as `AVAILABLE` for both threads, and then execute an update for both, resulting in a collision.
 
-1. **Base Configuration:** It retrieves the doctor's `startTime` (e.g., "09:00"), `endTime` (e.g., "17:00"), and `slotDurationMinutes` (e.g., 30 minutes) from the `User` table.
-2. **Interval Generation:** The algorithm iterates from the start time to the end time, generating discrete `Date` intervals based on the slot duration.
-3. **Data Aggregation:** Concurrently, it queries the database for two sets of data on the requested day:
-   - Existing appointments that are `BOOKED` or `ON_HOLD`.
-   - Any records in the `DoctorLeave` table that overlap with the requested day.
-4. **Conflict Resolution Loop:** As the algorithm evaluates each generated interval, it performs two checks:
-   - **Leave Check:** Does this specific interval intersect with the start and end timestamps of any approved `DoctorLeave`? 
-   - **Booking Check:** Is this precise slot time already present in the retrieved array of existing appointments?
-5. **Output:** Only intervals that pass both conflict checks are returned to the frontend as `AVAILABLE` slots. 
+### The Implementation
+HealthSync employs **Optimistic Concurrency Control** via atomic conditional updates in Prisma. When the `appointment.ts` Server Action executes, it does not do a sequential `findUnique` followed by an `update`. Instead, it relies on a single atomic `updateMany` (or an `update` with strict `where` constraints) that includes the state condition:
 
-This approach guarantees that if a doctor suddenly requests an emergency half-day leave, the system instantly truncates their availability without requiring manual cancellation of unbooked slots. 
+```typescript
+const result = await prisma.appointment.updateMany({
+  where: {
+    id: slotId,
+    status: "AVAILABLE", // The critical lock condition
+  },
+  data: {
+    patientId: currentPatientId,
+    status: "BOOKED",
+  }
+});
+
+if (result.count === 0) {
+  throw new Error("Slot is no longer available.");
+}
+```
+
+Because PostgreSQL processes this atomic update synchronously at the row level, only the first transaction to reach the database will successfully match the `status: "AVAILABLE"` condition. The second transaction will attempt the update, find 0 matching rows, and safely abort. This guarantees mathematically that double-booking is impossible at the database layer.
 
 ---
 
-## 3. Resiliency: Notification Failure Handling & Retries
+## 2. Slot Locks & Temporary Holds
 
-Third-party integrations (such as Resend for emails or Twilio for SMS) are inherently subject to network latency, rate limits, and outages. Relying on synchronous execution for these services risks disrupting the core user experience—for instance, failing to book an appointment merely because the confirmation email timed out.
+The booking process involves a multi-step wizard where patients must enter their symptoms and triage details before finalizing payment or confirmation. To prevent the frustrating experience of a slot being "stolen" while a user is typing out their symptoms, HealthSync utilizes a temporary Slot Lock mechanism.
 
-### The Asynchronous `NotificationQueue`
-HealthSync decouples critical application logic from third-party communication using an asynchronous Queue pattern.
+### The Implementation
+Instead of transitioning directly from `AVAILABLE` to `BOOKED`, the system introduces an intermediate state: `ON_HOLD`.
+1. When the patient clicks a time slot to begin the wizard, the server action atomically updates the slot status to `ON_HOLD` and sets an `expiresAt` timestamp (typically 10 minutes into the future).
+2. The UI proceeds to the wizard, knowing this slot is exclusively locked for this specific patient session.
+3. If the patient completes the wizard, the status is updated from `ON_HOLD` to `BOOKED`.
+4. **Reclaiming Abandoned Locks:** HealthSync runs a background cron job (or an API route triggered by a scheduler like Vercel Cron) that sweeps the database for abandoned holds. Any slot where `status === "ON_HOLD"` and `expiresAt < now()` is automatically reverted to `AVAILABLE`, ensuring calendar capacity is never permanently lost to abandoned browser tabs.
 
-1. **Task Enqueueing:** When an event occurs (e.g., an appointment is booked, rescheduled, or a waitlist slot opens), the system does not immediately send an email. Instead, it inserts a record into the `NotificationQueue` table with a status of `PENDING` and a `retryCount` of 0.
-2. **Cron Job Processor:** A Vercel-triggered Cron endpoint (`/api/cron/notifications`) runs at regular intervals. This endpoint queries the database for all notifications marked `PENDING` or `FAILED` where `retryCount < 3`.
-3. **Execution & Exponential Backoff Simulation:** The processor attempts to dispatch the queued messages via the respective third-party service provider. 
-   - **Success:** If the provider confirms receipt, the database record is updated to `SENT`.
-   - **Failure:** If the provider times out or throws an error, the catch block intercepts the failure. It updates the record status to `FAILED` and increments the `retryCount`. 
-4. **Resiliency:** Because the processor filters by `retryCount < 3`, a transient network failure will be automatically retried on the next cron execution. This ensures high deliverability of crucial medical reminders without impacting the performance of the main web threads. 
+---
 
-By employing row-level database locks, dynamic algorithmic scheduling, and asynchronous queue processing, the HealthSync platform delivers a robust, secure, and highly available architecture capable of supporting modern clinical workflows.
+## 3. Leave Conflict Cascade
+
+Doctors occasionally need to take unexpected leave (e.g., illness or emergencies). When a `DoctorLeave` is inserted into the system, it is not enough to simply mark the calendar as unavailable; the system must gracefully handle all previously existing appointments that fall within the leave window.
+
+### The Implementation
+This is handled via a complex cascade operation utilizing Prisma Transactions to ensure that the system does not end up in a partially cancelled state if a server crash occurs mid-process.
+
+When a leave is marked via `src/actions/leave.ts`:
+1. **The Transaction:** The system opens a transaction to create the `DoctorLeave` record, query all conflicting `BOOKED` appointments, and execute a bulk `updateMany` to change their status to `CANCELLED_DUE_TO_LEAVE`. It simultaneously updates any `AVAILABLE` slots to prevent future bookings.
+2. **The Notification Queue:** After the database transaction commits successfully, the affected appointments are batched. The system iterates over them to trigger side effects: sending cancellation emails via Resend/SendGrid and calling the Google/Outlook APIs to delete the calendar events. 
+3. By decoupling the database transaction from the third-party API calls, the system ensures that a failure in the email API does not roll back the crucial database state.
+
+---
+
+## 4. Notification Retries & Fault Tolerance
+
+Healthcare systems require reliable communication. Whether it is an appointment confirmation, a cancellation due to leave, or an automated Daily Medication Reminder generated by the AI post-visit summaries, emails must not be silently dropped if the third-party mail provider experiences an outage.
+
+### The Implementation
+While simpler applications use synchronous `await sendEmail()`, HealthSync is designed to queue notifications for fault tolerance.
+
+1. **Daily Medication Reminders:** The cron job located at `api/cron/medication-reminders/route.ts` scans the `lLMSummary` table for active medication schedules. It extracts the JSON instructions (e.g., "Take 50mg Lisinopril daily") and attempts to email the patient.
+2. **Error Handling & Retries:** If the SMTP provider times out, the `try/catch` block within the email sender catches the error. In a fully robust deployment, instead of discarding the message, it flags the `EmailQueue` database table with `status: "FAILED"`. 
+3. A subsequent cron job sweeps the queue for failed messages and attempts exponential backoff retries. This ensures that transient network failures do not result in missed clinical reminders. Furthermore, all LLM failures (such as timeouts during OpenAI triage) are explicitly caught and saved with `aiSummaryFailed: true` alongside safe fallback text, ensuring that the critical path of the application is never blocked by a third-party AI outage.
+
+## Conclusion
+By enforcing atomic database updates for concurrency, utilizing intermediate states for user-experience slot locking, managing cascades via ACID transactions, and handling API failures with robust fallbacks, HealthSync achieves enterprise-grade stability. The "Locked-Box" integration strategies ensure that new features like Stripe Doctor Onboarding can be added declaratively without risking regressions in these core architectural pillars.
