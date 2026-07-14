@@ -33,29 +33,28 @@ function LoginContent() {
       } else {
         toast.success("Successfully logged in!");
         
-        if (callbackUrl) {
+        const session = await getSession();
+        const role = (session?.user as any)?.role;
+
+        let targetUrl = "/patient/dashboard";
+        if (role === "DOCTOR") targetUrl = "/doctor/dashboard";
+        else if (role === "ADMIN") targetUrl = "/admin/dashboard";
+
+        if (callbackUrl && !callbackUrl.includes("/login")) {
           try {
-            // Check if it's an absolute URL
             const url = new URL(callbackUrl);
             if (url.origin === window.location.origin) {
-              router.push(url.pathname + url.search);
-              return;
+              targetUrl = url.pathname + url.search;
             }
           } catch (e) {
-            // If new URL() fails, it's a relative path, so push it directly
             if (callbackUrl.startsWith("/")) {
-              router.push(callbackUrl);
-              return;
+              targetUrl = callbackUrl;
             }
           }
         }
         
-        const session = await getSession();
-        const role = session?.user?.role;
-
-        if (role === "DOCTOR") router.push("/doctor/dashboard");
-        else if (role === "ADMIN") router.push("/admin/dashboard");
-        else router.push("/patient/dashboard");
+        // Force a hard navigation to ensure Next.js App Router middleware sees the new cookie
+        window.location.href = targetUrl;
       }
     } catch (error) {
       toast.error("An error occurred during login");
