@@ -46,7 +46,7 @@ export async function GET(req: Request) {
             email,
             password: hashedPassword,
             role: role as any,
-          },
+          } as any,
         });
       }
 

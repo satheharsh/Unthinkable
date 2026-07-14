@@ -72,7 +72,7 @@ export async function POST(req: Request) {
         email: email.toLowerCase(),
         password: hashedPassword,
         role: assignedRole,
-      },
+      } as any,
     });
 
     return NextResponse.json({ message: "User created successfully", user: { id: user.id, email: user.email } }, { status: 201 });

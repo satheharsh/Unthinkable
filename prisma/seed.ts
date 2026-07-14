@@ -14,7 +14,7 @@ async function main() {
     const email = `admin${i}@healthsync.com`;
     const admin = await prisma.user.upsert({
       where: { email },
-      update: { password: passwordHash },
+      update: { password: passwordHash } as any,
       create: {
         email,
         name: `System Admin ${i}`,
@@ -44,7 +44,7 @@ async function main() {
         startTime: i % 2 === 0 ? "08:00" : "09:00",
         endTime: i % 2 === 0 ? "16:00" : "17:00",
         slotDurationMinutes: 30,
-      },
+      } as any,
       create: {
         email,
         name: `Dr. Specialist ${i}`,
@@ -66,7 +66,7 @@ async function main() {
     const email = `patient${i}@example.com`;
     const patient = await prisma.user.upsert({
       where: { email },
-      update: { password: passwordHash },
+      update: { password: passwordHash } as any,
       create: {
         email,
         name: `Patient Name ${i}`,
