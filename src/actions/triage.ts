@@ -1,10 +1,12 @@
 "use server";
 
-import OpenAI from 'openai';
+import OpenAI from "openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'dummy_key_for_build',
-});
+const client = process.env.OPENAI_API_KEY
+  ? new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  })
+  : null;
 
 const LLM_TIMEOUT_MS = 5000;
 
@@ -12,35 +14,91 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error('LLM Timeout')), ms)
-    )
+      setTimeout(() => reject(new Error("LLM Timeout")), ms)
+    ),
   ]);
 }
 
-/**
- * Fallback helper function to map raw symptom text to a recommended specialty.
- * Used if the LLM fails or is unsure.
- */
 function mapSymptomToSpecialty(symptomText: string): string {
   const text = symptomText.toLowerCase();
-  
-  if (text.includes('chest pain') || text.includes('heart') || text.includes('palpitations')) {
-    return 'Cardiology';
+
+  if (
+    text.includes("chest pain") ||
+    text.includes("heart") ||
+    text.includes("palpitations")
+  ) {
+    return "Cardiology";
   }
-  if (text.includes('headache') || text.includes('migraine') || text.includes('dizziness')) {
-    return 'Neurology';
+
+  if (
+    text.includes("headache") ||
+    text.includes("migraine") ||
+    text.includes("dizziness")
+  ) {
+    return "Neurology";
   }
-  if (text.includes('skin') || text.includes('rash') || text.includes('itch') || text.includes('acne')) {
-    return 'Dermatology';
+
+  if (
+    text.includes("skin") ||
+    text.includes("rash") ||
+    text.includes("itch") ||
+    text.includes("acne")
+  ) {
+    return "Dermatology";
   }
-  if (text.includes('child') || text.includes('baby') || text.includes('kid')) {
-    return 'Pediatrics';
+
+  if (
+    text.includes("child") ||
+    text.includes("baby") ||
+    text.includes("kid")
+  ) {
+    return "Pediatrics";
   }
-  if (text.includes('bone') || text.includes('joint') || text.includes('muscle') || text.includes('fracture')) {
-    return 'Orthopedics';
+
+  if (
+    text.includes("bone") ||
+    text.includes("joint") ||
+    text.includes("muscle") ||
+    text.includes("fracture")
+  ) {
+    return "Orthopedics";
   }
-  
-  return 'General Practice';
+
+  return "General Practice";
+}
+
+function inferUrgency(symptomText: string): "Low" | "Medium" | "High" {
+  const text = symptomText.toLowerCase();
+
+  if (
+    text.includes("chest pain") ||
+    text.includes("shortness of breath") ||
+    text.includes("faint") ||
+    text.includes("severe") ||
+    text.includes("high fever")
+  ) {
+    return "High";
+  }
+
+  if (
+    text.includes("fever") ||
+    text.includes("pain") ||
+    text.includes("dizziness") ||
+    text.includes("vomit") ||
+    text.includes("rash")
+  ) {
+    return "Medium";
+  }
+
+  return "Low";
+}
+
+function fallbackQuestions() {
+  return [
+    "When did the symptoms start, and have they changed over time?",
+    "What makes the symptoms better or worse?",
+    "Are there related symptoms, medications, allergies, or prior conditions to consider?",
+  ];
 }
 
 export type TriageResult = {
@@ -50,56 +108,81 @@ export type TriageResult = {
   recommendedSpecialty: string;
 };
 
-/**
- * Analyzes patient symptoms using LLM and returns structured JSON output.
- */
-export async function analyzeSymptoms(symptoms: string): Promise<TriageResult> {
-  if (!symptoms || symptoms.trim() === '') {
+export async function analyzeSymptoms(
+  symptoms: string
+): Promise<TriageResult> {
+  if (!symptoms.trim()) {
     throw new Error("Symptoms cannot be empty");
   }
 
-  try {
-    const completionPromise = openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      response_format: { type: "json_object" },
-      messages: [
-        { 
-          role: 'system', 
-          content: `You are a medical triage assistant. Analyze the symptoms and return a JSON object with exactly these fields:
-- "urgencyLevel": (e.g., Low, Medium, High)
-- "chiefComplaint": (A short summary of the main issue)
-- "threeQuestions": (An array of 3 clarifying questions a doctor would ask)
-- "recommendedSpecialty": (e.g., Neurology, Cardiology, General Practice, Dermatology). If unsure, default to 'General Practice'.` 
-        },
-        { role: 'user', content: symptoms }
-      ],
-    });
-
-    const response = await withTimeout(completionPromise, LLM_TIMEOUT_MS);
-    const content = response.choices[0]?.message?.content;
-    
-    if (!content) throw new Error("Empty response from LLM");
-
-    const parsed = JSON.parse(content) as TriageResult;
-    
-    // Ensure all required fields exist
-    if (!parsed.recommendedSpecialty) {
-      parsed.recommendedSpecialty = mapSymptomToSpecialty(symptoms);
-    }
-    if (!parsed.urgencyLevel) parsed.urgencyLevel = 'Low';
-    if (!parsed.chiefComplaint) parsed.chiefComplaint = symptoms;
-    if (!parsed.threeQuestions) parsed.threeQuestions = [];
-
-    return parsed;
-  } catch (error) {
-    console.error('LLM Symptom Analysis failed, using fallback:', error);
-    
-    // Fallback logic
+  // No API key? Use fallback immediately.
+  if (!client) {
     return {
-      urgencyLevel: 'Unknown',
+      urgencyLevel: inferUrgency(symptoms),
       chiefComplaint: symptoms,
-      threeQuestions: [],
-      recommendedSpecialty: mapSymptomToSpecialty(symptoms)
+      threeQuestions: fallbackQuestions(),
+      recommendedSpecialty: mapSymptomToSpecialty(symptoms),
+    };
+  }
+
+  try {
+    const completion = withTimeout(
+      client.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `
+You are a medical triage assistant.
+
+Return ONLY valid JSON with this exact schema:
+
+{
+  "urgencyLevel": "Low | Medium | High",
+  "chiefComplaint": "string",
+  "threeQuestions": ["q1","q2","q3"],
+  "recommendedSpecialty": "string"
+}
+`,
+          },
+          {
+            role: "user",
+            content: symptoms,
+          },
+        ],
+        response_format: {
+          type: "json_object",
+        },
+      }),
+      LLM_TIMEOUT_MS
+    );
+
+    const response = await completion;
+
+    const content = response.choices?.[0]?.message?.content;
+
+    if (!content) {
+      throw new Error("Empty LLM response");
+    }
+
+    const parsed = JSON.parse(content) as Partial<TriageResult>;
+
+    return {
+      urgencyLevel: parsed.urgencyLevel ?? inferUrgency(symptoms),
+      chiefComplaint: parsed.chiefComplaint ?? symptoms,
+      threeQuestions: parsed.threeQuestions ?? fallbackQuestions(),
+      recommendedSpecialty:
+        parsed.recommendedSpecialty ??
+        mapSymptomToSpecialty(symptoms),
+    };
+  } catch (err) {
+    console.error("LLM failed:", err);
+
+    return {
+      urgencyLevel: inferUrgency(symptoms),
+      chiefComplaint: symptoms,
+      threeQuestions: fallbackQuestions(),
+      recommendedSpecialty: mapSymptomToSpecialty(symptoms),
     };
   }
 }

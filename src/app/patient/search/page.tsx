@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,21 +10,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { analyzeSymptoms, TriageResult } from "@/actions/triage";
+import { getDoctorDirectory } from "@/actions/appointment";
 
-const mockDoctors = [
-  { id: "1", name: "Dr. Sarah Smith", specialization: "Cardiology", rating: 4.9, availableSlots: 3 },
-  { id: "2", name: "Dr. James Jones", specialization: "Dermatology", rating: 4.7, availableSlots: 0 },
-  { id: "3", name: "Dr. Emily Adams", specialization: "Pediatrics", rating: 4.8, availableSlots: 5 },
-  { id: "4", name: "Dr. Michael Chen", specialization: "Neurology", rating: 4.6, availableSlots: 2 },
-  { id: "5", name: "Dr. William Taylor", specialization: "General Practice", rating: 4.9, availableSlots: 4 },
-  { id: "6", name: "Dr. Jessica Davis", specialization: "Orthopedics", rating: 4.8, availableSlots: 1 },
-];
+type DoctorDirectoryItem = Awaited<ReturnType<typeof getDoctorDirectory>>[number];
 
 export default function DoctorSearchPage() {
   const [step, setStep] = useState<1 | 2>(1);
   const [symptoms, setSymptoms] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [triageResult, setTriageResult] = useState<TriageResult | null>(null);
+  const [doctors, setDoctors] = useState<DoctorDirectoryItem[]>([]);
+  const [isLoadingDoctors, setIsLoadingDoctors] = useState(true);
   
   // Doctor search state (Step 2)
   const [searchTerm, setSearchTerm] = useState("");
@@ -33,6 +29,21 @@ export default function DoctorSearchPage() {
   const { status } = useSession();
   const isAuthenticated = status === "authenticated";
   const router = useRouter();
+
+  useEffect(() => {
+    async function loadDoctors() {
+      try {
+        const directory = await getDoctorDirectory();
+        setDoctors(directory);
+      } catch (error) {
+        console.error("Failed to load doctors", error);
+      } finally {
+        setIsLoadingDoctors(false);
+      }
+    }
+
+    loadDoctors();
+  }, []);
 
   const handleAnalyzeSymptoms = async () => {
     if (!symptoms.trim()) return;
@@ -62,7 +73,7 @@ export default function DoctorSearchPage() {
     setRecommendedSpecialty(null);
   };
 
-  const filteredDoctors = mockDoctors.filter((doc) => {
+  const filteredDoctors = doctors.filter((doc) => {
     const matchesSearch = 
       doc.specialization.toLowerCase().includes(searchTerm.toLowerCase()) ||
       doc.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -77,6 +88,10 @@ export default function DoctorSearchPage() {
   const handleBookClick = (e: React.MouseEvent, docId: string) => {
     e.preventDefault();
     const query = symptoms ? `?symptoms=${encodeURIComponent(symptoms)}` : '';
+    if (!isAuthenticated) {
+      router.push(`/login?callbackUrl=${encodeURIComponent(`/patient/book/${docId}${query}`)}`);
+      return;
+    }
     router.push(`/patient/book/${docId}${query}`);
   };
 
@@ -169,17 +184,39 @@ export default function DoctorSearchPage() {
               className="space-y-8"
             >
               {recommendedSpecialty && (
-                <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 flex items-center justify-between shadow-sm">
-                  <div className="flex items-center text-teal-800">
-                    <Sparkles className="h-5 w-5 mr-3 text-teal-600" />
-                    <span>
-                      We've matched you with <strong className="font-bold">{recommendedSpecialty}</strong> specialists based on your symptoms.
-                    </span>
+                <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 flex flex-col gap-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center text-teal-800">
+                      <Sparkles className="h-5 w-5 mr-3 text-teal-600" />
+                      <span>
+                        We've matched you with <strong className="font-bold">{recommendedSpecialty}</strong> specialists based on your symptoms.
+                      </span>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={clearSpecialtyFilter} className="text-teal-700 hover:text-teal-900 hover:bg-teal-100">
+                      <X className="h-4 w-4 mr-1" />
+                      Clear Filter
+                    </Button>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={clearSpecialtyFilter} className="text-teal-700 hover:text-teal-900 hover:bg-teal-100">
-                    <X className="h-4 w-4 mr-1" />
-                    Clear Filter
-                  </Button>
+                  {triageResult && (
+                    <div className="grid gap-3 md:grid-cols-3 text-sm text-slate-700">
+                      <div className="bg-white border border-teal-100 rounded-lg p-3">
+                        <div className="font-bold text-slate-800 mb-1">Urgency</div>
+                        {triageResult.urgencyLevel}
+                      </div>
+                      <div className="bg-white border border-teal-100 rounded-lg p-3">
+                        <div className="font-bold text-slate-800 mb-1">Chief Complaint</div>
+                        {triageResult.chiefComplaint}
+                      </div>
+                      <div className="bg-white border border-teal-100 rounded-lg p-3">
+                        <div className="font-bold text-slate-800 mb-1">Questions</div>
+                        <ul className="space-y-1">
+                          {triageResult.threeQuestions.slice(0, 3).map((question) => (
+                            <li key={question}>{question}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -198,7 +235,11 @@ export default function DoctorSearchPage() {
               </div>
 
               <div className="grid gap-8 md:grid-cols-2">
-                {filteredDoctors.map((doc, index) => (
+                {isLoadingDoctors ? (
+                  <div className="col-span-full text-center py-12 text-slate-500 text-lg">
+                    Loading doctors...
+                  </div>
+                ) : filteredDoctors.map((doc, index) => (
                   <motion.div 
                     key={doc.id}
                     initial={{ opacity: 0, y: 10 }}
@@ -240,7 +281,7 @@ export default function DoctorSearchPage() {
                   </motion.div>
                 ))}
 
-                {filteredDoctors.length === 0 && (
+                {!isLoadingDoctors && filteredDoctors.length === 0 && (
                   <div className="col-span-full text-center py-12 text-slate-500 text-lg">
                     No {recommendedSpecialty ? recommendedSpecialty : ''} doctors found matching "{searchTerm}".
                   </div>

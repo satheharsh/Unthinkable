@@ -27,6 +27,7 @@ model User {
   name                String
   role                Role          @default(PATIENT)
   specialization      String?
+  password            String?
   
   patientAppointments Appointment[] @relation("PatientAppointments")
   doctorAppointments  Appointment[] @relation("DoctorAppointments")

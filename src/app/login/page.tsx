@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { signIn } from "next-auth/react";
+import { getSession, signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,10 +50,11 @@ function LoginContent() {
           }
         }
         
-        // Redirect based on role if no valid callbackUrl
-        if (email.toLowerCase() === "patient@example.com") router.push("/patient/dashboard");
-        else if (email.toLowerCase() === "doctor@example.com") router.push("/doctor/dashboard");
-        else if (email.toLowerCase() === "admin@example.com") router.push("/admin/dashboard");
+        const session = await getSession();
+        const role = session?.user?.role;
+
+        if (role === "DOCTOR") router.push("/doctor/dashboard");
+        else if (role === "ADMIN") router.push("/admin/dashboard");
         else router.push("/patient/dashboard");
       }
     } catch (error) {
@@ -69,7 +70,7 @@ function LoginContent() {
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center p-4 bg-slate-50">
+      <div className="min-h-[80vh] flex items-center justify-center p-4 bg-slate-50">
       <Card className="w-full max-w-md shadow-xl border-slate-200">
         <CardHeader className="text-center space-y-4 pb-4">
           <div className="mx-auto bg-teal-100 w-16 h-16 rounded-full flex items-center justify-center mb-2">
@@ -81,7 +82,7 @@ function LoginContent() {
         <CardContent>
           <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm text-blue-800 font-medium text-center">
-              <strong>Demo Mode:</strong> Please click one of the buttons below to load a prototype account, then click "Sign In".
+              <strong>Demo Mode:</strong> Load a seeded account, then click "Sign In".
             </p>
           </div>
           <form onSubmit={handleLogin} className="space-y-6">
@@ -117,13 +118,13 @@ function LoginContent() {
               1. Click a role to load credentials
             </p>
             <div className="grid gap-3">
-              <Button type="button" variant="outline" className="border-teal-200 hover:bg-teal-50 hover:text-teal-700" onClick={() => fillCredentials("patient@example.com")}>
+              <Button type="button" variant="outline" className="border-teal-200 hover:bg-teal-50 hover:text-teal-700" onClick={() => fillCredentials("alice@example.com")}>
                 Load Patient Demo
               </Button>
-              <Button type="button" variant="outline" className="border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700" onClick={() => fillCredentials("doctor@example.com")}>
+              <Button type="button" variant="outline" className="border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700" onClick={() => fillCredentials("sarah.smith@healthsync.com")}>
                 Load Doctor Demo
               </Button>
-              <Button type="button" variant="outline" className="border-amber-200 hover:bg-amber-50 hover:text-amber-700" onClick={() => fillCredentials("admin@example.com")}>
+              <Button type="button" variant="outline" className="border-amber-200 hover:bg-amber-50 hover:text-amber-700" onClick={() => fillCredentials("admin@healthsync.com")}>
                 Load Admin Demo
               </Button>
             </div>

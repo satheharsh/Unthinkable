@@ -20,14 +20,30 @@ async function sendNotification(type: string, recipient: string, subject: string
     return true;
   }
   
-  // SMS Mock
-  console.log(`[Notification ${type}] To: ${recipient}`);
-  console.log(`Message: ${message}`);
-  
-  // Simulate random failure (10% chance) for demonstrating SMS retry logic
-  if (Math.random() < 0.1) {
-    throw new Error("Simulated SMS network timeout/failure");
+  if (type === "SMS") {
+    if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+      // Fallback to mock if credentials are not provided
+      console.log(`[Twilio Mock] To: ${recipient}`);
+      console.log(`Message: ${message}`);
+      if (Math.random() < 0.1) throw new Error("Simulated SMS network timeout/failure");
+      return true;
+    }
+
+    const twilio = require('twilio');
+    const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    
+    try {
+      await client.messages.create({
+        body: message,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: recipient
+      });
+      return true;
+    } catch (error: any) {
+      throw new Error(`Twilio Error: ${error.message}`);
+    }
   }
+
   return true;
 }
 

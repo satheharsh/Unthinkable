@@ -1,19 +1,19 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { PrismaClient } from "@prisma/client";
+import prisma from "@/lib/prisma";
 
-const prisma = new PrismaClient();
+
 
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
-      name: "Mock Credentials",
+      name: "Email Credentials",
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        if (!credentials?.email) return null;
+        if (!credentials?.email || !credentials?.password) return null;
         
         const email = credentials.email.toLowerCase();
         
@@ -21,11 +21,17 @@ export const authOptions: NextAuthOptions = {
           where: { email }
         });
         
-        if (user) {
-          return { id: user.id, name: user.name, email: user.email, role: user.role };
+        if (!user) return null;
+
+        // If the user was created before passwords were required, 
+        // they won't have one. In production, they'd need a password reset.
+        if (user.password) {
+          const bcrypt = require("bcryptjs");
+          const isValid = await bcrypt.compare(credentials.password, user.password);
+          if (!isValid) return null;
         }
-        
-        return null;
+
+        return { id: user.id, name: user.name, email: user.email, role: user.role };
       }
     })
   ],

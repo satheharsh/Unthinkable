@@ -1,7 +1,7 @@
-import { PrismaClient, Appointment } from '@prisma/client';
+import { Appointment } from '@prisma/client';
 import { BookAppointmentSchema } from '@/lib/validations';
+import prisma from "@/lib/prisma";
 
-const prisma = new PrismaClient();
 export const db = prisma;
 
 /**

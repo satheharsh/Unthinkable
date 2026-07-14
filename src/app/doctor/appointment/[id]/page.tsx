@@ -1,89 +1,127 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { use, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { generatePostVisitSummary } from "@/actions/llm";
-import { AlertCircle, CheckCircle2, Video } from "lucide-react";
+import { getAppointmentDetail } from "@/actions/appointment";
+import { AlertCircle, CheckCircle2, Loader2, Video } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
-// Mock data representing what a Server Component would fetch
-const mockAppointment = {
-  id: "appt_1",
-  patientName: "Alice Wonderland",
-  time: "09:00 AM",
-  meetLink: "https://meet.google.com/abc-defg-hij",
-  aiSummaryFailed: false, // Toggle this to true to test the raw fallback
-  symptoms: "Patient complains of severe headache, photophobia, and slight fever since yesterday.",
-  llmSummary: "Patient presents with acute cephalalgia, photophobia, and low-grade fever. [URGENCY: HIGH]",
-};
+type AppointmentDetail = Awaited<ReturnType<typeof getAppointmentDetail>>;
 
-export default function AppointmentDetailPage({ params }: { params: { id: string } }) {
+export default function AppointmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const [appointment, setAppointment] = useState<AppointmentDetail | null>(null);
   const [notes, setNotes] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [postVisitSummary, setPostVisitSummary] = useState("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
 
   useEffect(() => {
-    if (notes === "") return;
-    
+    async function loadAppointment() {
+      try {
+        const detail = await getAppointmentDetail(id);
+        setAppointment(detail);
+        setNotes(detail.doctorNotes);
+        setPostVisitSummary(detail.postVisitSummary);
+      } catch (error: any) {
+        toast.error(error.message || "Unable to load appointment");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadAppointment();
+  }, [id]);
+
+  useEffect(() => {
+    if (notes === "" || notes === appointment?.doctorNotes) return;
+
     setSaveStatus("saving");
     const timeoutId = setTimeout(() => {
-      // Mock API call to save notes
       setSaveStatus("saved");
-    }, 1000);
+    }, 700);
 
     return () => clearTimeout(timeoutId);
-  }, [notes]);
+  }, [appointment?.doctorNotes, notes]);
 
-  // Determine urgency from the AI Summary text (mock implementation)
-  const isHighUrgency = mockAppointment.llmSummary?.includes("URGENCY: HIGH");
-  const isMediumUrgency = mockAppointment.llmSummary?.includes("URGENCY: MEDIUM");
+  const summaryText = appointment?.preVisitSummary || "";
+  const isHighUrgency = /urgency(?:\s+level)?\s*:\s*high/i.test(summaryText) || /\bhigh urgency\b/i.test(summaryText);
+  const isMediumUrgency = /urgency(?:\s+level)?\s*:\s*medium/i.test(summaryText) || /\bmedium urgency\b/i.test(summaryText);
 
   let summaryCardClass = "border-border";
-  if (!mockAppointment.aiSummaryFailed) {
+  if (appointment && !appointment.aiSummaryFailed) {
     if (isHighUrgency) summaryCardClass = "border-red-500 shadow-sm shadow-red-100 bg-red-50/20";
     else if (isMediumUrgency) summaryCardClass = "border-yellow-500 shadow-sm shadow-yellow-100 bg-yellow-50/20";
   }
 
   const handleNotesSubmit = async () => {
+    if (!appointment) return;
+
     setIsSubmitting(true);
     try {
-      const result = await generatePostVisitSummary(mockAppointment.id, notes);
+      const result = await generatePostVisitSummary(appointment.id, notes);
       setPostVisitSummary(result);
-      toast.success("Summary generated successfully!");
+      setAppointment({ ...appointment, doctorNotes: notes, postVisitSummary: result });
+      setSaveStatus("saved");
+      toast.success("Summary generated and saved.");
     } catch (e) {
       console.error(e);
-      toast.error("Failed to contact AI service. Notes saved in raw format.");
+      toast.error("Failed to generate summary. Notes were saved as fallback.");
       setPostVisitSummary(notes);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="p-8 min-h-[70vh] flex items-center justify-center text-slate-500">
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+        Loading appointment...
+      </div>
+    );
+  }
+
+  if (!appointment) {
+    return (
+      <div className="p-8 min-h-[70vh] flex items-center justify-center text-slate-500">
+        Appointment not found.
+      </div>
+    );
+  }
+
   return (
     <div className="p-8 space-y-8 max-w-5xl mx-auto">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight">{mockAppointment.patientName}</h1>
-          <p className="text-lg text-muted-foreground mt-1">Today at {mockAppointment.time}</p>
+          <h1 className="text-4xl font-bold tracking-tight">{appointment.patientName}</h1>
+          <p className="text-lg text-muted-foreground mt-1">{appointment.time}</p>
         </div>
-        <Link href={mockAppointment.meetLink} target="_blank">
-          <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white">
+        {appointment.meetLink ? (
+          <Link href={appointment.meetLink} target="_blank">
+            <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white">
+              <Video className="mr-2 h-5 w-5" />
+              Join Telehealth
+            </Button>
+          </Link>
+        ) : (
+          <Button size="lg" disabled>
             <Video className="mr-2 h-5 w-5" />
-            Join Telehealth
+            No Meet Link
           </Button>
-        </Link>
+        )}
       </div>
 
       <div className="grid gap-8 md:grid-cols-2">
-        {/* Pre-Visit Information */}
         <div className="space-y-4">
           <h2 className="text-2xl font-semibold tracking-tight">Pre-Visit Information</h2>
-          
-          {mockAppointment.aiSummaryFailed ? (
+
+          {appointment.aiSummaryFailed ? (
             <Card className="border-border bg-muted/30">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center">
@@ -92,9 +130,9 @@ export default function AppointmentDetailPage({ params }: { params: { id: string
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-base leading-relaxed">{mockAppointment.symptoms}</p>
+                <p className="text-base leading-relaxed whitespace-pre-wrap">{appointment.symptoms}</p>
                 <p className="text-sm text-muted-foreground mt-6 italic bg-muted p-3 rounded-md">
-                  AI Summary generation timed out or failed. Displaying the patient's exact input.
+                  AI summary generation timed out or failed. Displaying the patient's exact input.
                 </p>
               </CardContent>
             </Card>
@@ -108,31 +146,30 @@ export default function AppointmentDetailPage({ params }: { params: { id: string
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-base leading-relaxed">{mockAppointment.llmSummary}</p>
+                <p className="text-base leading-relaxed whitespace-pre-wrap">{appointment.preVisitSummary}</p>
               </CardContent>
             </Card>
           )}
         </div>
 
-        {/* Post-Visit Actions */}
         <div className="space-y-4">
           <div className="flex justify-between items-end">
             <h2 className="text-2xl font-semibold tracking-tight">Post-Visit Notes</h2>
             <span className={`text-sm font-medium transition-opacity ${saveStatus === 'idle' ? 'opacity-0' : 'opacity-100'} ${saveStatus === 'saved' ? 'text-emerald-600' : 'text-slate-400'}`}>
               {saveStatus === 'saving' && 'Saving...'}
-              {saveStatus === 'saved' && 'All changes saved'}
+              {saveStatus === 'saved' && 'Ready to generate'}
             </span>
           </div>
           <Card className="shadow-sm">
             <CardContent className="pt-6 space-y-4">
-              <Textarea 
-                placeholder="Enter your raw consultation notes here. The AI will structure them for the final record."
+              <Textarea
+                placeholder="Enter consultation notes, prescriptions, and follow-up instructions."
                 className="min-h-[200px] text-base resize-y"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
               />
               <div className="flex justify-end">
-                <Button onClick={handleNotesSubmit} disabled={isSubmitting || !notes} className="w-full sm:w-auto">
+                <Button onClick={handleNotesSubmit} disabled={isSubmitting || notes.trim().length < 5} className="w-full sm:w-auto">
                   {isSubmitting ? "Structuring..." : "Save & Generate AI Summary"}
                 </Button>
               </div>

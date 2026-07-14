@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from "@/lib/prisma";
 
 /**
  * Creates or updates an appointment to ON_HOLD status for a specific patient.

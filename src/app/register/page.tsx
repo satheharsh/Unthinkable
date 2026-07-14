@@ -17,7 +17,6 @@ export default function RegisterPage() {
     name: "",
     email: "",
     password: "",
-    role: "PATIENT",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -99,19 +98,6 @@ export default function RegisterPage() {
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
-                <select 
-                  id="role"
-                  className="w-full p-2 border rounded-md"
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                >
-                  <option value="PATIENT">Patient</option>
-                  <option value="DOCTOR">Doctor</option>
-                </select>
-              </div>
-              
               <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700" disabled={loading}>
                 {loading ? "Registering..." : "Register"}
               </Button>

@@ -2,6 +2,10 @@ import { db } from "@/utils/db";
 
 export async function generateAvailableSlots(doctorId: string, dateStr: string) {
   // dateStr format: YYYY-MM-DD
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    throw new Error("Invalid date format. Use YYYY-MM-DD.");
+  }
+
   const doctor = await db.user.findUnique({
     where: { id: doctorId },
     select: { startTime: true, endTime: true, slotDurationMinutes: true }
@@ -35,9 +39,13 @@ export async function generateAvailableSlots(doctorId: string, dateStr: string) 
         gte: startOfDay,
         lt: nextDay,
       },
-      status: {
-        in: ["BOOKED", "ON_HOLD"]
-      }
+      OR: [
+        { status: "BOOKED" },
+        {
+          status: "ON_HOLD",
+          holdExpiresAt: { gt: new Date() },
+        },
+      ],
     }
   });
 

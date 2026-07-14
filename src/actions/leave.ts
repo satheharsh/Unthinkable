@@ -1,94 +1,131 @@
-import { PrismaClient } from '@prisma/client';
-import { sendCancellationEmail } from './email';
-import { deleteCalendarEvent } from './calendar';
-import { MarkLeaveSchema } from '@/lib/validations';
+"use server";
 
-const prisma = new PrismaClient();
+import "server-only";
 
-/**
- * Marks a doctor as being on leave for a specific date.
- * Automatically cancels all BOOKED appointments for that day, deletes their calendar events,
- * and sends cancellation emails to the affected patients.
- */
-export async function markDoctorOnLeave(doctorId: string, date: Date, reason: string) {
-  const parsed = MarkLeaveSchema.safeParse({ doctorId, date, reason });
-  if (!parsed.success) {
-    throw new Error("Validation Error: " + parsed.error.errors[0].message);
+import prisma from "@/lib/prisma";
+import { sendCancellationEmail } from "./email";
+import { deleteCalendarEvent } from "./calendar";
+import { MarkLeaveSchema } from "@/lib/validations";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+
+export async function markDoctorOnLeave(
+  doctorId: string,
+  date: Date,
+  reason: string
+) {
+  const session = await getServerSession(authOptions);
+  const user = session?.user as { id: string; role: string } | undefined;
+
+  if (!user || (user.role !== "ADMIN" && user.id !== doctorId)) {
+    throw new Error("Unauthorized: only admins or the assigned doctor can mark leave.");
   }
 
-  // Start of the day and end of the day for the given date
+  // Validate input
+  const parsed = MarkLeaveSchema.safeParse({
+    doctorId,
+    date,
+    reason,
+  });
+
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0].message);
+  }
+
+  // Beginning of the day
   const startOfDay = new Date(date);
   startOfDay.setHours(0, 0, 0, 0);
-  
+
+  // End of the day
   const endOfDay = new Date(date);
   endOfDay.setHours(23, 59, 59, 999);
 
+  // Store appointments for later email/calendar processing
+  let affectedAppointments: any[] = [];
+
   await prisma.$transaction(async (tx) => {
-    // 1. Create the DoctorLeave record
+    // Create leave entry
     await tx.doctorLeave.create({
       data: {
         doctorId,
         startTime: startOfDay,
         endTime: endOfDay,
         reason,
-      }
+      },
     });
 
-    // 2. Find all affected BOOKED appointments
-    const affectedAppointments = await tx.appointment.findMany({
+    // Get booked appointments
+    affectedAppointments = await tx.appointment.findMany({
       where: {
         doctorId,
         slotTime: {
           gte: startOfDay,
           lte: endOfDay,
         },
-        status: 'BOOKED',
+        status: "BOOKED",
       },
       include: {
         patient: true,
-      }
+      },
     });
 
-    // 3. Cancel affected appointments
+    // Cancel booked appointments
+    if (affectedAppointments.length > 0) {
+      await tx.appointment.updateMany({
+        where: {
+          id: {
+            in: affectedAppointments.map((a) => a.id),
+          },
+        },
+        data: {
+          status: "CANCELLED_DUE_TO_LEAVE",
+        },
+      });
+    }
+
+    // Cancel remaining available/on-hold slots
     await tx.appointment.updateMany({
       where: {
-        id: { in: affectedAppointments.map(a => a.id) }
+        doctorId,
+        slotTime: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+        status: {
+          in: ["AVAILABLE", "ON_HOLD"],
+        },
       },
       data: {
-        status: 'CANCELLED',
-      }
+        status: "CANCELLED_DUE_TO_LEAVE",
+      },
     });
+  });
 
-    // 4. Handle external side effects (Email + Calendar)
-    // (Note: In a high-scale production system, we'd enqueue these to a background job system.
-    // For this implementation, we run them sequentially inside the request.)
-    for (const appt of affectedAppointments) {
+  // Outside transaction: send emails & delete calendar events
+  for (const appt of affectedAppointments) {
+    try {
       if (appt.patient?.email) {
         await sendCancellationEmail(
-          appt.patient.email, 
-          appt.patient.name, 
+          appt.patient.email,
+          appt.patient.name,
           appt.slotTime.toLocaleString(),
           reason
         );
       }
 
-      // If a Google Calendar event was generated, delete it
       if (appt.calendarEventId) {
-         await deleteCalendarEvent(appt.calendarEventId);
+        await deleteCalendarEvent(appt.calendarEventId);
       }
+    } catch (error) {
+      console.error(
+        `Failed processing appointment ${appt.id}:`,
+        error
+      );
     }
-    
-    // 5. Also cancel any ON_HOLD or AVAILABLE slots for that day 
-    // so no one else tries to book them or comes off a waitlist.
-    await tx.appointment.updateMany({
-      where: {
-        doctorId,
-        slotTime: { gte: startOfDay, lte: endOfDay },
-        status: { in: ['AVAILABLE', 'ON_HOLD'] }
-      },
-      data: {
-        status: 'CANCELLED',
-      }
-    });
-  });
+  }
+
+  return {
+    success: true,
+    cancelledAppointments: affectedAppointments.length,
+  };
 }

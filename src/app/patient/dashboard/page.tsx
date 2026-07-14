@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Calendar, Video, FileText, Pill, Clock, Activity, CheckCircle2, ChevronRight, Check } from "lucide-react";
 import Link from "next/link";
 import { Modal } from "@/components/ui/modal";
@@ -36,6 +37,9 @@ export default function PatientDashboardPage() {
   
   // Modal states
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<any | null>(null);
+  const [rescheduleTime, setRescheduleTime] = useState("");
+  const [isRescheduling, setIsRescheduling] = useState(false);
   const [selectedPastVisit, setSelectedPastVisit] = useState<typeof pastSummaries[0] | null>(null);
 
   const { status } = useSession();
@@ -48,6 +52,43 @@ export default function PatientDashboardPage() {
   const handleMarkTaken = (medId: string) => {
     setTakenMedications(prev => ({ ...prev, [medId]: true }));
     toast.success("Medication marked as taken");
+  };
+
+  const reloadDashboard = async () => {
+    const data = await getPatientDashboardData();
+    setUpcomingAppointments(data.upcomingAppointments);
+    setPastSummaries(data.pastSummaries);
+  };
+
+  const handleReschedule = async () => {
+    if (!selectedAppointment || !rescheduleTime) return;
+
+    setIsRescheduling(true);
+    try {
+      const response = await fetch("/api/appointments/reschedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          appointmentId: selectedAppointment.id,
+          newSlotTime: new Date(rescheduleTime).toISOString(),
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to reschedule appointment");
+      }
+
+      toast.success("Appointment rescheduled successfully.");
+      setIsRescheduleModalOpen(false);
+      setSelectedAppointment(null);
+      setRescheduleTime("");
+      await reloadDashboard();
+    } catch (error: any) {
+      toast.error(error.message || "Unable to reschedule appointment");
+    } finally {
+      setIsRescheduling(false);
+    }
   };
 
   // Collect all medications from past visits for the medication tab
@@ -136,7 +177,10 @@ export default function PatientDashboardPage() {
                           variant="outline" 
                           size="lg" 
                           className="flex-1 font-semibold"
-                          onClick={() => setIsRescheduleModalOpen(true)}
+                          onClick={() => {
+                            setSelectedAppointment(appt);
+                            setIsRescheduleModalOpen(true);
+                          }}
                         >
                           Reschedule
                         </Button>
@@ -272,24 +316,29 @@ export default function PatientDashboardPage() {
         title="Reschedule Appointment"
       >
         <div className="space-y-6">
-          <p className="text-slate-600">Select a new date and time for your appointment with Dr. Sarah Smith.</p>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <Button variant="outline" className="h-14">Tomorrow, 10:00 AM</Button>
-            <Button variant="outline" className="h-14">Tomorrow, 02:00 PM</Button>
-            <Button variant="outline" className="h-14">Wed, 09:00 AM</Button>
-            <Button variant="outline" className="h-14">Thu, 11:30 AM</Button>
+          <p className="text-slate-600">
+            Choose a new date and time for your appointment with {selectedAppointment?.doctor}.
+          </p>
+
+          <div className="space-y-2">
+            <label htmlFor="reschedule-time" className="text-sm font-medium text-slate-700">New appointment time</label>
+            <Input
+              id="reschedule-time"
+              type="datetime-local"
+              value={rescheduleTime}
+              onChange={(event) => setRescheduleTime(event.target.value)}
+            />
           </div>
 
           <div className="pt-4 flex justify-end gap-3">
             <Button variant="ghost" onClick={() => {
               setIsRescheduleModalOpen(false);
-              toast("Reschedule cancelled");
-            }}>Cancel</Button>
-            <Button onClick={() => {
-              setIsRescheduleModalOpen(false);
-              toast.success("Appointment rescheduled successfully!");
-            }}>Confirm New Time</Button>
+              setSelectedAppointment(null);
+              setRescheduleTime("");
+            }} disabled={isRescheduling}>Cancel</Button>
+            <Button onClick={handleReschedule} disabled={!rescheduleTime || isRescheduling}>
+              {isRescheduling ? "Rescheduling..." : "Confirm New Time"}
+            </Button>
           </div>
         </div>
       </Modal>

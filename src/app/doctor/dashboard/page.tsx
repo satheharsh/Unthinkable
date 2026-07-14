@@ -10,6 +10,7 @@ import Link from "next/link";
 import { Calendar, Clock, Video, Search, Pill, Check, Power } from "lucide-react";
 import { toast } from "sonner";
 import { getDoctorDashboardData } from "@/actions/dashboard";
+import { generatePostVisitSummary } from "@/actions/llm";
 import { useEffect } from "react";
 
 export default function DoctorDashboardPage() {
@@ -34,6 +35,9 @@ export default function DoctorDashboardPage() {
   
   const [isPrescribeModalOpen, setIsPrescribeModalOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<{ id: string, name: string } | null>(null);
+  const [medicationName, setMedicationName] = useState("");
+  const [dosage, setDosage] = useState("");
+  const [isPrescribing, setIsPrescribing] = useState(false);
 
   // Filter appointments
   const filteredAppointments = appointments.filter(appt => 
@@ -45,11 +49,27 @@ export default function DoctorDashboardPage() {
     setIsPrescribeModalOpen(true);
   };
 
-  const handlePrescribeSubmit = (e: React.FormEvent) => {
+  const handlePrescribeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success("Prescription sent to pharmacy.");
-    setIsPrescribeModalOpen(false);
-    setSelectedPatient(null);
+
+    if (!selectedPatient) return;
+
+    setIsPrescribing(true);
+    try {
+      await generatePostVisitSummary(
+        selectedPatient.id,
+        `Prescription:\n${medicationName}: ${dosage}\nFollow-up: Patient should follow medication instructions and contact the clinic if symptoms worsen.`
+      );
+      toast.success("Prescription saved and reminder schedule prepared.");
+      setIsPrescribeModalOpen(false);
+      setSelectedPatient(null);
+      setMedicationName("");
+      setDosage("");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to save prescription");
+    } finally {
+      setIsPrescribing(false);
+    }
   };
 
   return (
@@ -161,11 +181,23 @@ export default function DoctorDashboardPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Medication Name</label>
-              <Input required placeholder="e.g. Amoxicillin 500mg" className="w-full" />
+              <Input
+                required
+                placeholder="e.g. Amoxicillin 500mg"
+                className="w-full"
+                value={medicationName}
+                onChange={(event) => setMedicationName(event.target.value)}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Dosage & Frequency</label>
-              <Input required placeholder="e.g. Take 1 tablet twice daily for 7 days" className="w-full" />
+              <Input
+                required
+                placeholder="e.g. Take 1 tablet twice daily for 7 days"
+                className="w-full"
+                value={dosage}
+                onChange={(event) => setDosage(event.target.value)}
+              />
             </div>
           </div>
           
@@ -173,10 +205,10 @@ export default function DoctorDashboardPage() {
             <Button type="button" variant="ghost" onClick={() => {
               setIsPrescribeModalOpen(false);
               toast("Prescription cancelled");
-            }}>Cancel</Button>
-            <Button type="submit" className="bg-teal-600 hover:bg-teal-700 text-white">
+            }} disabled={isPrescribing}>Cancel</Button>
+            <Button type="submit" className="bg-teal-600 hover:bg-teal-700 text-white" disabled={isPrescribing}>
               <Check className="mr-2 h-4 w-4" />
-              Send to Pharmacy
+              {isPrescribing ? "Saving..." : "Save Prescription"}
             </Button>
           </div>
         </form>

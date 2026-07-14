@@ -1,10 +1,6 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { Resend } from 'resend';
-
-const prisma = new PrismaClient();
-const resend = new Resend(process.env.RESEND_API_KEY || 'dummy_key_for_build');
-const FROM_EMAIL = 'notifications@healthsync.com';
+import prisma from '@/lib/prisma';
+import { queueEmailNotification } from '@/actions/email';
 
 /**
  * Cron Job: Runs daily (e.g., 08:00 AM)
@@ -13,6 +9,11 @@ const FROM_EMAIL = 'notifications@healthsync.com';
  */
 export async function GET(request: Request) {
   try {
+    const authHeader = request.headers.get('authorization');
+    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      return new NextResponse('Unauthorized', { status: 401 });
+    }
+
     // Find all LLMSummaries that have a populated medicationSchedule JSON array
     const summaries = await prisma.lLMSummary.findMany({
       where: {
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
       }
     });
 
-    let emailsSent = 0;
+    let remindersQueued = 0;
 
     for (const summary of summaries) {
       const patient = summary.appointment.patient;
@@ -39,11 +40,12 @@ export async function GET(request: Request) {
       if (!meds || !Array.isArray(meds) || meds.length === 0) continue;
 
       // Format medications into an HTML list
-      const medsHtml = meds.map(m => `<li><strong>${m.medicationName}:</strong> ${m.instructions}</li>`).join('');
+      const medsHtml = meds
+        .map((m, index) => `<li><strong>${m.name || m.medicationName || `Medication ${index + 1}`}:</strong> ${m.instructions || 'Follow prescription instructions.'}</li>`)
+        .join('');
 
-      await resend.emails.send({
-        from: FROM_EMAIL,
-        to: patient.email,
+      await queueEmailNotification({
+        recipient: patient.email,
         subject: 'Daily Medication Reminder',
         html: `
           <h2>Hello ${patient.name},</h2>
@@ -54,10 +56,10 @@ export async function GET(request: Request) {
           <p>Stay healthy!</p>
         `,
       });
-      emailsSent++;
+      remindersQueued++;
     }
 
-    return NextResponse.json({ success: true, emailsSent });
+    return NextResponse.json({ success: true, remindersQueued });
   } catch (error) {
     console.error("Medication reminder cron failed:", error);
     return NextResponse.json({ success: false, error: "Internal Server Error" }, { status: 500 });

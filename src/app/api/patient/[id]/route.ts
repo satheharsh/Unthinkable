@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/utils/db";
 import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 
 export async function GET(
   req: Request,
@@ -8,12 +9,15 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const session = await getServerSession();
-    // In a real app we'd verify the session. For this prototype, we'll mock the doctor ID.
-    const doctorId = "mock-doctor-id"; // session?.user?.id
+    const session = await getServerSession(authOptions);
+    const user = session?.user as { id: string; role: string } | undefined;
 
-    const patient = await db.user.findUnique({
-      where: { id: id, role: "PATIENT" },
+    if (!user || (user.role !== "DOCTOR" && user.role !== "ADMIN")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const patient = await db.user.findFirst({
+      where: { id, role: "PATIENT" },
       select: {
         id: true,
         name: true,
@@ -29,10 +33,10 @@ export async function GET(
     // HIPAA-style Audit Logging
     await db.auditLog.create({
       data: {
-        userId: doctorId,
+        userId: user.id,
         action: "VIEW_PATIENT_RECORD",
         patientId: patient.id,
-        details: `Doctor viewed patient records via API`
+        details: `${user.role} viewed patient records via API`
       }
     });
 
