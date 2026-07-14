@@ -50,6 +50,9 @@ export function Header() {
             <Link href="/login">
               <Button variant="ghost" size="sm" className="font-medium">Sign In</Button>
             </Link>
+            <Link href="/register">
+              <Button variant="ghost" size="sm" className="font-medium">Register</Button>
+            </Link>
           </div>
         )}
       </div>

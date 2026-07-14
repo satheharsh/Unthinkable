@@ -94,8 +94,10 @@ function BookingWizardContent({ doctorId }: { doctorId: string }) {
   }, [step, countdown]);
 
   const handleHoldSlot = async () => {
+    console.log("handleHoldSlot triggered", { selectedSlot, symptoms, step });
     if (!selectedSlot) return;
-    if (symptoms.trim().length < 5) {
+    
+    if (symptoms.trim().length === 0) {
       toast.error("Please describe your symptoms before confirming.");
       return;
     }
