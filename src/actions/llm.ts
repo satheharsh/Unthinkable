@@ -46,13 +46,8 @@ export async function generatePreVisitSummary(appointmentId: string, rawSymptoms
       where: { id: appointmentId },
       data: {
         symptoms: rawSymptoms,
+        preVisitSummary: summary,
         aiSummaryFailed: false,
-        llmSummary: {
-          upsert: {
-            create: { summaryText: summary },
-            update: { summaryText: summary }
-          }
-        }
       }
     });
 
@@ -65,6 +60,7 @@ export async function generatePreVisitSummary(appointmentId: string, rawSymptoms
       where: { id: appointmentId },
       data: {
         symptoms: rawSymptoms,
+        preVisitSummary: rawSymptoms,
         aiSummaryFailed: true,
       }
     });
@@ -98,13 +94,9 @@ export async function generatePostVisitSummary(appointmentId: string, doctorNote
     await prisma.appointment.update({
       where: { id: appointmentId },
       data: {
+        doctorNotes: doctorNotes,
+        postVisitSummary: summary,
         aiSummaryFailed: false,
-        llmSummary: {
-          upsert: {
-            create: { summaryText: summary },
-            update: { summaryText: summary }
-          }
-        }
       }
     });
 
@@ -115,17 +107,10 @@ export async function generatePostVisitSummary(appointmentId: string, doctorNote
     // Flag the appointment as AI summary failed and save the raw notes
     await prisma.appointment.update({
       where: { id: appointmentId },
-      data: { aiSummaryFailed: true }
-    });
-    
-    await prisma.lLMSummary.upsert({
-      where: { appointmentId },
-      create: {
-        appointmentId,
-        summaryText: doctorNotes,
-      },
-      update: {
-        summaryText: doctorNotes,
+      data: { 
+        doctorNotes: doctorNotes,
+        postVisitSummary: doctorNotes,
+        aiSummaryFailed: true 
       }
     });
     

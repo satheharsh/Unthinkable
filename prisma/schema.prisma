@@ -18,6 +18,7 @@ enum AppointmentStatus {
   ON_HOLD
   BOOKED
   CANCELLED
+  CANCELLED_DUE_TO_LEAVE
 }
 
 model User {
@@ -54,7 +55,10 @@ model Appointment {
   holdExpiresAt   DateTime?
   meetLink        String?
   calendarEventId String?
-  symptoms        String?
+  symptoms        String?           @db.Text
+  preVisitSummary String?           @db.Text
+  doctorNotes     String?           @db.Text
+  postVisitSummary String?          @db.Text
   aiSummaryFailed Boolean           @default(false)
   
   llmSummary      LLMSummary?

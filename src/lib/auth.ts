@@ -1,5 +1,8 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -12,19 +15,17 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email) return null;
         
-        // Mock DB lookup based on email
         const email = credentials.email.toLowerCase();
         
-        if (email === "patient@example.com") {
-          return { id: "user_1", name: "Jane Patient", email, role: "PATIENT" };
-        } else if (email === "doctor@example.com") {
-          return { id: "doc_1", name: "Dr. Sarah Smith", email, role: "DOCTOR" };
-        } else if (email === "admin@example.com") {
-          return { id: "admin_1", name: "System Admin", email, role: "ADMIN" };
+        const user = await prisma.user.findUnique({
+          where: { email }
+        });
+        
+        if (user) {
+          return { id: user.id, name: user.name, email: user.email, role: user.role };
         }
         
-        // If not one of the pre-defined accounts, default to PATIENT for testing
-        return { id: "user_random", name: "Test User", email, role: "PATIENT" };
+        return null;
       }
     })
   ],
@@ -38,6 +39,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         (session.user as any).role = token.role;
+        (session.user as any).id = token.sub;
       }
       return session;
     }

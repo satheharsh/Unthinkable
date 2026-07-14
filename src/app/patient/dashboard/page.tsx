@@ -11,41 +11,28 @@ import { cn } from "@/lib/utils";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-
-const upcomingAppointments = [
-  { id: "appt_1", doctor: "Dr. Sarah Smith", specialization: "Cardiology", time: "Tomorrow, 09:00 AM", meetLink: "https://meet.google.com/xyz-abcd-efg" }
-];
-
-const pastSummaries = [
-  { 
-    id: "appt_old_1", 
-    doctor: "Dr. James Jones", 
-    date: "Oct 12, 2023", 
-    summary: "Patient presented with mild skin irritation. Prescribed topical cream. Condition is non-serious.",
-    medications: [
-      { id: "med_1", name: "Hydrocortisone 1%", instructions: "Apply to affected area twice daily for 7 days" }
-    ],
-    actionItems: [
-      "Avoid direct sunlight on affected area",
-      "Return in 2 weeks if symptoms persist"
-    ]
-  },
-  { 
-    id: "appt_old_2", 
-    doctor: "Dr. Emily Adams", 
-    date: "Aug 05, 2023", 
-    summary: "Routine checkup. All vitals normal. Patient reported mild seasonal allergies.",
-    medications: [
-      { id: "med_2", name: "Loratadine 10mg", instructions: "Take one tablet daily as needed for allergies" }
-    ],
-    actionItems: [
-      "Schedule next routine checkup in 1 year"
-    ]
-  }
-];
+import { getPatientDashboardData } from "@/actions/dashboard";
 
 export default function PatientDashboardPage() {
   const [activeTab, setActiveTab] = useState<"upcoming" | "past" | "medications">("upcoming");
+  const [upcomingAppointments, setUpcomingAppointments] = useState<any[]>([]);
+  const [pastSummaries, setPastSummaries] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const data = await getPatientDashboardData();
+        setUpcomingAppointments(data.upcomingAppointments);
+        setPastSummaries(data.pastSummaries);
+      } catch (e) {
+        console.error("Failed to load dashboard:", e);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadData();
+  }, []);
   
   // Modal states
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
@@ -70,7 +57,7 @@ export default function PatientDashboardPage() {
     <motion.div 
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="max-w-6xl mx-auto p-8 space-y-12"
+      className="max-w-6xl mx-auto p-8 space-y-12 bg-slate-50 min-h-screen rounded-xl"
     >
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-4">
@@ -114,7 +101,9 @@ export default function PatientDashboardPage() {
             transition={{ duration: 0.2 }}
             className="space-y-8"
           >
-            {upcomingAppointments.length > 0 ? (
+            {isLoading ? (
+              <div className="text-center py-20 text-slate-500">Loading your appointments...</div>
+            ) : upcomingAppointments.length > 0 ? (
               <div className="grid gap-8 md:grid-cols-2">
                 {upcomingAppointments.map((appt) => (
                   <Card key={appt.id} className="border-teal-500/30 shadow-md bg-teal-50/30">
@@ -176,7 +165,9 @@ export default function PatientDashboardPage() {
             transition={{ duration: 0.2 }}
             className="space-y-8"
           >
-            {pastSummaries.length > 0 ? (
+            {isLoading ? (
+              <div className="text-center py-20 text-slate-500">Loading past visits...</div>
+            ) : pastSummaries.length > 0 ? (
               <div className="grid gap-6 md:grid-cols-2">
                 {pastSummaries.map((record) => (
                   <Card 
@@ -220,7 +211,9 @@ export default function PatientDashboardPage() {
             transition={{ duration: 0.2 }}
             className="space-y-8"
           >
-            {allMedications.length > 0 ? (
+            {isLoading ? (
+              <div className="text-center py-20 text-slate-500">Loading medications...</div>
+            ) : allMedications.length > 0 ? (
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {allMedications.map((med) => {
                   const isTaken = takenMedications[med.id];

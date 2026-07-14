@@ -9,22 +9,34 @@ import { Modal } from "@/components/ui/modal";
 import Link from "next/link";
 import { Calendar, Clock, Video, Search, Pill, Check, Power } from "lucide-react";
 import { toast } from "sonner";
-
-const initialAppointments = [
-  { id: "appt_1", time: "09:00 AM", patientName: "Alice Wonderland", status: "BOOKED" },
-  { id: "appt_2", time: "10:00 AM", patientName: "Bob Builder", status: "BOOKED" },
-  { id: "appt_3", time: "11:30 AM", patientName: "Charlie Chaplin", status: "ON_HOLD" },
-];
+import { getDoctorDashboardData } from "@/actions/dashboard";
+import { useEffect } from "react";
 
 export default function DoctorDashboardPage() {
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [acceptingWalkIns, setAcceptingWalkIns] = useState(false);
+  
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const data = await getDoctorDashboardData();
+        setAppointments(data.appointments);
+      } catch (e) {
+        console.error("Failed to load dashboard:", e);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadData();
+  }, []);
   
   const [isPrescribeModalOpen, setIsPrescribeModalOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<{ id: string, name: string } | null>(null);
 
   // Filter appointments
-  const filteredAppointments = initialAppointments.filter(appt => 
+  const filteredAppointments = appointments.filter(appt => 
     appt.patientName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -44,7 +56,7 @@ export default function DoctorDashboardPage() {
     <motion.div 
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="p-8 space-y-8 max-w-7xl mx-auto"
+      className="p-8 space-y-8 max-w-7xl mx-auto bg-slate-50 min-h-screen rounded-xl"
     >
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-10">
         <div className="flex items-center space-x-3">
@@ -79,7 +91,10 @@ export default function DoctorDashboardPage() {
       </div>
       
       <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-        <AnimatePresence>
+        {isLoading ? (
+          <div className="col-span-full py-16 text-center text-slate-500">Loading schedule...</div>
+        ) : (
+          <AnimatePresence>
           {filteredAppointments.map((appt, index) => (
             <motion.div
               key={appt.id}
@@ -127,6 +142,7 @@ export default function DoctorDashboardPage() {
             </motion.div>
           ))}
         </AnimatePresence>
+        )}
         
         {filteredAppointments.length === 0 && (
           <div className="text-slate-500 col-span-full py-16 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50 text-lg flex flex-col items-center">

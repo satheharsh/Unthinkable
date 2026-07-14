@@ -3,20 +3,27 @@
 import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Activity, LogOut, Settings } from "lucide-react";
+import { Activity, LogOut, Settings, ArrowLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export function Header() {
   const { data: session, status } = useSession();
+  const router = useRouter();
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => router.back()} aria-label="Go back" className="text-slate-500 hover:text-slate-800">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <Link href="/" className="flex items-center gap-2">
           <div className="bg-teal-100 p-1.5 rounded-md">
             <Activity className="h-5 w-5 text-teal-700" />
           </div>
           <span className="font-bold text-xl tracking-tight text-slate-800">HealthSync</span>
         </Link>
+        </div>
 
         {status === "loading" ? (
           <div className="h-8 w-24 bg-slate-100 animate-pulse rounded-md"></div>

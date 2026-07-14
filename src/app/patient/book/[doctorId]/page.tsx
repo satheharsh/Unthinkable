@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock, CheckCircle2, AlertCircle, CreditCard, Lock } from "lucide-react";
 import { toast } from "sonner";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
+import { finalizeBooking } from "@/actions/appointment";
 
 // Mock data
 const mockSlots = [
@@ -30,6 +31,7 @@ function BookingWizardContent({ doctorId }: { doctorId: string }) {
   const [isHolding, setIsHolding] = useState(false);
   
   const searchParams = useSearchParams();
+  const router = useRouter();
   const symptoms = searchParams.get("symptoms") || "No symptoms provided.";
 
   // Timer logic for Step 2
@@ -58,14 +60,41 @@ function BookingWizardContent({ doctorId }: { doctorId: string }) {
 
   const handlePaymentSuccess = async () => {
     setIsHolding(true);
-    // Simulate verifying payment and finalizing booking
-    await new Promise((resolve) => setTimeout(resolve, 1500));
     
-    toast.success("Payment successful! Appointment booked.");
-    
-    setTimeout(() => {
-      window.location.href = "/patient/dashboard";
-    }, 1500);
+    // Call server action to create DB record, send email, and create calendar event
+    try {
+      // selectedSlot is mocked as e.g., { id: "slot_1", time: "09:00 AM" }
+      // To create a valid date for slotTime, we create a date for today with that time
+      const today = new Date();
+      const timeParts = selectedSlot.time.match(/(\d+):(\d+)\s+(AM|PM)/i);
+      if (timeParts) {
+        let hours = parseInt(timeParts[1]);
+        const mins = parseInt(timeParts[2]);
+        const ampm = timeParts[3].toUpperCase();
+        if (ampm === "PM" && hours < 12) hours += 12;
+        if (ampm === "AM" && hours === 12) hours = 0;
+        today.setHours(hours, mins, 0, 0);
+      }
+      
+      const res = await finalizeBooking({
+        doctorId,
+        slotTime: today.toISOString(),
+        symptoms,
+      });
+
+      if (res.success) {
+        toast.success("Payment successful! Appointment booked and email sent.");
+        setTimeout(() => {
+          router.push("/patient/dashboard");
+        }, 1500);
+      } else {
+        toast.error(res.error || "Failed to finalize booking");
+        setIsHolding(false);
+      }
+    } catch (e: any) {
+      toast.error(e.message || "An error occurred");
+      setIsHolding(false);
+    }
   };
 
   const formatTime = (seconds: number) => {

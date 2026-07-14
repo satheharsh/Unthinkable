@@ -7,7 +7,7 @@ export default withAuth(
     const path = req.nextUrl.pathname;
 
     // RBAC Logic
-    if (path.startsWith("/patient") && !path.startsWith("/patient/search") && !path.startsWith("/patient/book") && token?.role !== "PATIENT") {
+    if (path.startsWith("/patient") && token?.role !== "PATIENT") {
       return NextResponse.redirect(new URL("/login", req.url));
     }
     
@@ -23,8 +23,6 @@ export default withAuth(
     secret: process.env.NEXTAUTH_SECRET || "default_secret_for_development",
     callbacks: {
       authorized: ({ req, token }) => {
-        const path = req.nextUrl.pathname;
-        if (path.startsWith("/patient/search") || path.startsWith("/patient/book")) return true;
         return !!token;
       },
     },
