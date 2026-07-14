@@ -76,13 +76,8 @@ export default function DoctorSearchPage() {
 
   const handleBookClick = (e: React.MouseEvent, docId: string) => {
     e.preventDefault();
-    if (!isAuthenticated) {
-      router.push("/login");
-    } else {
-      // Pass symptoms to the booking page via query params
-      const query = symptoms ? `?symptoms=${encodeURIComponent(symptoms)}` : '';
-      router.push(`/patient/book/${docId}${query}`);
-    }
+    const query = symptoms ? `?symptoms=${encodeURIComponent(symptoms)}` : '';
+    router.push(`/patient/book/${docId}${query}`);
   };
 
   return (

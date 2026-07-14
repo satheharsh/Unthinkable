@@ -33,15 +33,28 @@ function LoginContent() {
       } else {
         toast.success("Successfully logged in!");
         
-        if (callbackUrl && callbackUrl.startsWith("/")) {
-          router.push(callbackUrl);
-        } else {
-          // Redirect based on role (mock implementation for routing)
-          if (email.toLowerCase() === "patient@example.com") router.push("/patient/dashboard");
-          else if (email.toLowerCase() === "doctor@example.com") router.push("/doctor/dashboard");
-          else if (email.toLowerCase() === "admin@example.com") router.push("/admin/dashboard");
-          else router.push("/patient/dashboard");
+        if (callbackUrl) {
+          try {
+            // Check if it's an absolute URL
+            const url = new URL(callbackUrl);
+            if (url.origin === window.location.origin) {
+              router.push(url.pathname + url.search);
+              return;
+            }
+          } catch (e) {
+            // If new URL() fails, it's a relative path, so push it directly
+            if (callbackUrl.startsWith("/")) {
+              router.push(callbackUrl);
+              return;
+            }
+          }
         }
+        
+        // Redirect based on role if no valid callbackUrl
+        if (email.toLowerCase() === "patient@example.com") router.push("/patient/dashboard");
+        else if (email.toLowerCase() === "doctor@example.com") router.push("/doctor/dashboard");
+        else if (email.toLowerCase() === "admin@example.com") router.push("/admin/dashboard");
+        else router.push("/patient/dashboard");
       }
     } catch (error) {
       toast.error("An error occurred during login");
