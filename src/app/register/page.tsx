@@ -17,6 +17,7 @@ export default function RegisterPage() {
     name: "",
     email: "",
     password: "",
+    role: "PATIENT",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,8 +32,14 @@ export default function RegisterPage() {
       });
 
       if (response.ok) {
-        toast.success("Registration successful! Please login.");
-        router.push("/login");
+        const data = await response.json();
+        if (data.checkoutUrl) {
+          toast.info("Redirecting to secure payment...");
+          window.location.href = data.checkoutUrl;
+        } else {
+          toast.success("Registration successful! Please login.");
+          router.push("/login");
+        }
       } else {
         const data = await response.json();
         toast.error(data.message || "Registration failed");
@@ -69,6 +76,27 @@ export default function RegisterPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Account Type</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <Button
+                    type="button"
+                    variant={formData.role === "PATIENT" ? "default" : "outline"}
+                    className={formData.role === "PATIENT" ? "bg-teal-600 hover:bg-teal-700" : ""}
+                    onClick={() => setFormData({ ...formData, role: "PATIENT" })}
+                  >
+                    Patient (Free)
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={formData.role === "DOCTOR" ? "default" : "outline"}
+                    className={formData.role === "DOCTOR" ? "bg-teal-600 hover:bg-teal-700" : ""}
+                    onClick={() => setFormData({ ...formData, role: "DOCTOR" })}
+                  >
+                    Doctor ($99 Setup)
+                  </Button>
+                </div>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>
                 <Input 

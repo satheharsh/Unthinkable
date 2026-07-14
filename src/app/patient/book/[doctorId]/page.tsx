@@ -128,7 +128,8 @@ function BookingWizardContent({ doctorId }: { doctorId: string }) {
 
   const handleBack = () => setStep((s) => s - 1);
 
-  const handleConfirm = () => {
+  const handleConfirm = (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
     // Move to payment step
     setStep(3);
   };
@@ -321,7 +322,7 @@ function BookingWizardContent({ doctorId }: { doctorId: string }) {
 
                   <div className="flex justify-between pt-4">
                     <Button variant="outline" size="lg" onClick={handleBack}>Back to Edit</Button>
-                    <Button size="lg" onClick={handleConfirm} disabled={countdown === 0}>
+                    <Button type="button" size="lg" onClick={handleConfirm} disabled={countdown === 0 || symptoms.trim().length === 0}>
                       Proceed to Payment
                     </Button>
                   </div>

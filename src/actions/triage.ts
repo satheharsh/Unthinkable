@@ -72,6 +72,9 @@ function inferUrgency(symptomText: string): "Low" | "Medium" | "High" {
 
   if (
     text.includes("chest pain") ||
+    text.includes("heart attack") ||
+    text.includes("stroke") ||
+    text.includes("unconscious") ||
     text.includes("shortness of breath") ||
     text.includes("faint") ||
     text.includes("severe") ||
@@ -134,6 +137,9 @@ export async function analyzeSymptoms(
             role: "system",
             content: `
 You are a medical triage assistant.
+
+CRITICAL MEDICAL EMERGENCY TRIAGE RULE:
+If the patient mentions 'heart attack', 'chest pain', 'shortness of breath', 'stroke', or 'unconscious', the urgency MUST be returned as 'High' regardless of other input.
 
 Return ONLY valid JSON with this exact schema:
 
