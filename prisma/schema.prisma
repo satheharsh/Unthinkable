@@ -30,6 +30,10 @@ model User {
   patientAppointments Appointment[] @relation("PatientAppointments")
   doctorAppointments  Appointment[] @relation("DoctorAppointments")
   
+  startTime           String?       @default("09:00")
+  endTime             String?       @default("17:00")
+  slotDurationMinutes Int?          @default(30)
+  
   waitlists           Waitlist[]
   leaves              DoctorLeave[]
   
@@ -98,4 +102,25 @@ model DoctorLeave {
   
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+}
+
+model NotificationQueue {
+  id          String   @id @default(uuid())
+  type        String   
+  recipient   String
+  subject     String?
+  message     String   @db.Text
+  status      String   @default("PENDING") 
+  retryCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String
+  action      String
+  patientId   String?
+  details     String?
+  createdAt   DateTime @default(now())
 }

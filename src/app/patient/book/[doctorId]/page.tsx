@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { Calendar, Clock, CheckCircle2, AlertCircle, CreditCard, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { useSearchParams } from "next/navigation";
 
@@ -51,9 +51,18 @@ function BookingWizardContent({ doctorId }: { doctorId: string }) {
 
   const handleBack = () => setStep((s) => s - 1);
 
-  const handleConfirm = async () => {
-    toast.success("Appointment successfully booked!");
-    // Simulate navigation delay for toast to be visible
+  const handleConfirm = () => {
+    // Move to payment step
+    setStep(3);
+  };
+
+  const handlePaymentSuccess = async () => {
+    setIsHolding(true);
+    // Simulate verifying payment and finalizing booking
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    
+    toast.success("Payment successful! Appointment booked.");
+    
     setTimeout(() => {
       window.location.href = "/patient/dashboard";
     }, 1500);
@@ -77,6 +86,8 @@ function BookingWizardContent({ doctorId }: { doctorId: string }) {
           <span className={`${step >= 1 ? 'text-teal-600 font-bold' : ''}`}>1. Select Time</span>
           <span>&gt;</span>
           <span className={`${step >= 2 ? 'text-teal-600 font-bold' : ''}`}>2. Confirm</span>
+          <span>&gt;</span>
+          <span className={`${step >= 3 ? 'text-teal-600 font-bold' : ''}`}>3. Payment</span>
         </div>
       </div>
 
@@ -167,9 +178,63 @@ function BookingWizardContent({ doctorId }: { doctorId: string }) {
                   <div className="flex justify-between pt-4">
                     <Button variant="outline" size="lg" onClick={handleBack}>Back to Edit</Button>
                     <Button size="lg" onClick={handleConfirm} disabled={countdown === 0}>
-                      Confirm Booking
+                      Proceed to Payment
                     </Button>
                   </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {step === 3 && (
+            <motion.div
+              key="step3"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Card className="border-teal-500 shadow-lg relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-10">
+                  <CreditCard className="w-32 h-32" />
+                </div>
+                <CardHeader>
+                  <CardTitle className="flex items-center text-slate-800">
+                    <Lock className="mr-3 h-6 w-6 text-teal-600" aria-hidden="true" />
+                    Secure Copay Checkout
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start space-x-4 text-amber-900 mb-6">
+                    <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0 text-amber-600" aria-hidden="true" />
+                    <div>
+                      <p className="font-semibold text-sm">Slot Still Held</p>
+                      <p className="text-amber-800 text-sm mt-1">Complete payment in <strong>{formatTime(countdown)}</strong>.</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-6">
+                    <div className="flex justify-between items-center border-b border-slate-200 pb-4 mb-4">
+                      <span className="text-slate-600 font-medium">Consultation Copay</span>
+                      <span className="text-xl font-bold text-slate-800">$45.00</span>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div className="p-4 border-2 border-teal-100 bg-white rounded-lg flex items-center justify-center space-x-2 text-slate-500">
+                        <CreditCard className="h-5 w-5" />
+                        <span>Mock Stripe Elements Container</span>
+                      </div>
+                      <Button size="lg" className="w-full bg-slate-800 hover:bg-slate-900" onClick={handlePaymentSuccess} disabled={countdown === 0 || isHolding}>
+                        {isHolding ? "Processing..." : "Pay $45.00 securely"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-center text-slate-500 mt-4 flex items-center justify-center">
+                    <Lock className="w-3 h-3 mr-1" /> Payments processed securely by Stripe
+                  </p>
+
                 </CardContent>
               </Card>
             </motion.div>

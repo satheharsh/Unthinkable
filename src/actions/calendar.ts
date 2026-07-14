@@ -65,3 +65,27 @@ export async function deleteCalendarEvent(eventId: string) {
     // Suppress error to avoid breaking main cancellation flows
   }
 }
+
+/**
+ * Updates a Google Calendar event time.
+ */
+export async function updateCalendarEvent(
+  eventId: string,
+  startTime: Date,
+  endTime: Date
+) {
+  try {
+    const response = await calendar.events.patch({
+      calendarId: 'primary',
+      eventId: eventId,
+      requestBody: {
+        start: { dateTime: startTime.toISOString() },
+        end: { dateTime: endTime.toISOString() },
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error updating Google Calendar event:", error);
+    // Suppress to not break if credentials missing in dev
+  }
+}

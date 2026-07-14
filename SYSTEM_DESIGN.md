@@ -1,37 +1,60 @@
-# HealthSync System Design & Technical Decisions
+# HealthSync: System Design Document
 
-This document outlines the architectural decisions and engineering solutions for three critical challenges in the HealthSync platform.
+This document outlines the architectural decisions, database interaction patterns, and fail-safe mechanisms implemented within the HealthSync platform. The architecture emphasizes data integrity, concurrency management, and robust error handling to deliver a professional, enterprise-grade healthcare scheduling system.
 
-## 1. The Double-Booking Race Condition
-**Challenge:** In high-traffic clinic scenarios, two patients might attempt to book the exact same doctor's slot at the exact same millisecond. Relying on standard application-layer logic (e.g., checking if a slot is available, then updating it) introduces a race condition where both requests could pass the read check before either commits the write.
+---
 
-**Solution: Pessimistic Row-Level Locking**
-We solved this strictly at the database layer to guarantee data integrity regardless of how many Node.js or Vercel edge instances are running. 
-When a user begins the booking wizard, we initiate a Prisma `$transaction` and execute a raw SQL query: `SELECT * FROM "Appointment" WHERE id = $1 FOR UPDATE`.
-The `FOR UPDATE` clause instructs PostgreSQL to place a row-level lock on that specific appointment. If a second user's request arrives simultaneously, their transaction is forced to wait until the first transaction completes. 
-1. If the first transaction succeeds, it updates the slot status to `ON_HOLD`.
-2. When the database lock releases, the second transaction reads the row, sees that the status is no longer `AVAILABLE`, and immediately throws an exception to reject the booking attempt, ensuring zero double-bookings.
+## 1. Concurrency Management: Double-Booking Prevention & Slot Hold Mechanism
 
-We pair this with an expiration timestamp (`holdExpiresAt`). A background cron job sweeps the database every 5 minutes and releases any slots that were held but never confirmed.
+One of the most critical requirements of a healthcare scheduling platform is the absolute prevention of double-booking. When multiple patients attempt to book the same appointment slot simultaneously, the system must guarantee that only one transaction succeeds.
 
-## 2. Leave Conflict Handling
-**Challenge:** When a doctor marks themselves on leave (e.g., for sickness or vacation), the system must cleanly handle any existing appointments that were already scheduled for that day, while simultaneously preventing new appointments from being booked.
+### The Slot Hold Architecture
+To provide a smooth user experience, HealthSync employs a two-phase booking approach. When a patient begins the checkout process, the system places a temporary 5-minute "Hold" on the selected slot. 
 
-**Solution: Transactional Cascades & Automated Recovery**
-The `markDoctorOnLeave` server action orchestrates a multi-step workflow wrapped in a single ACID transaction to prevent partial state updates.
-1. It creates a `DoctorLeave` record denoting the timeframe.
-2. It bulk-updates all `AVAILABLE` and `ON_HOLD` slots for that timeframe to `CANCELLED`, instantly removing them from the patient-facing search UI.
-3. It identifies all `BOOKED` appointments within the timeframe and transitions them to `CANCELLED`.
+This is achieved using **Prisma Database Transactions** paired with **Raw SQL Row-Level Locks**:
 
-Once the database transaction successfully commits, the system handles external side effects. It dispatches a cancellation email via Resend to every affected patient explaining the reason for the cancellation. Crucially, it also calls the Google Calendar API to delete the previously generated Calendar Events and Google Meet links, ensuring the doctor's actual calendar stays perfectly synchronized with the platform.
+1. **Row-Level Locking:** Inside the Prisma `$transaction` block, the system executes a raw SQL query using `SELECT ... FOR UPDATE`. This exclusive lock tells the PostgreSQL database to block any concurrent transactions attempting to read or modify that specific row until the current transaction completes.
+2. **State Transition:** If the slot is verified as `AVAILABLE`, the transaction updates the status to `ON_HOLD` and assigns a `holdExpiresAt` timestamp (current time + 5 minutes). 
+3. **Checkout Finalization:** The patient is then routed to the Secure Copay Checkout screen. During this 5-minute window, the UI displays a countdown timer. Other users querying the schedule will see the slot omitted from the dynamic list because it is no longer marked `AVAILABLE`.
+4. **Resolution:** Upon successful simulated Stripe payment, the slot transitions to `BOOKED`. If the countdown expires before checkout completion, an automated background cron job sweeps the database and reverts expired `ON_HOLD` slots back to `AVAILABLE`.
 
-## 3. LLM Graceful Degradation
-**Challenge:** We utilize OpenAI's models to transform raw patient symptoms and unformatted doctor notes into highly structured, professional clinical summaries. However, third-party LLM APIs can experience latency spikes, rate limits, or outright outages. A production healthcare app cannot crash or block a doctor's workflow just because a downstream AI service is unreachable.
+By enforcing these constraints at the database level rather than the application level, HealthSync is immune to race conditions that typically plague high-traffic booking systems.
 
-**Solution: Strict Timeouts & Fallback Flags**
-We treat the LLM as a progressive enhancement rather than a hard dependency. 
-Every call to the OpenAI API is wrapped in a `Promise.race()` with a strict 5,000ms (5-second) timeout. 
-If the API fails to respond within this window, or if it throws a 500 error, our catch block activates. Instead of returning an error to the UI and forcing the doctor to re-type their notes, the system automatically saves the raw, unstructured notes directly into the database. 
-Crucially, it sets a boolean flag on the appointment: `aiSummaryFailed: true`.
+---
 
-On the front-end, the UI reads this flag. If `false`, it renders the beautiful, conditionally-formatted AI summary. If `true`, it gracefully degrades the UI, rendering a standard "Raw Symptoms/Notes" block with a clear alert informing the user that the AI formatting is temporarily unavailable. This robust pattern ensures the clinic can continue operating and recording critical health data uninterrupted, regardless of OpenAI's uptime.
+## 2. Dynamic Scheduling: Doctor Leave Conflict Handling
+
+Doctors require flexible schedules. Hardcoding available slots is insufficient for a real-world application. HealthSync implements a dynamic slot generation algorithm that reconciles a doctor's standard working hours against real-time appointments and unexpected leaves of absence.
+
+### The `generateAvailableSlots` Utility
+When a patient views a doctor's availability for a specific day, the `/api/doctors/[id]/slots` endpoint invokes the `generateAvailableSlots` utility. This function performs the following reconciliations:
+
+1. **Base Configuration:** It retrieves the doctor's `startTime` (e.g., "09:00"), `endTime` (e.g., "17:00"), and `slotDurationMinutes` (e.g., 30 minutes) from the `User` table.
+2. **Interval Generation:** The algorithm iterates from the start time to the end time, generating discrete `Date` intervals based on the slot duration.
+3. **Data Aggregation:** Concurrently, it queries the database for two sets of data on the requested day:
+   - Existing appointments that are `BOOKED` or `ON_HOLD`.
+   - Any records in the `DoctorLeave` table that overlap with the requested day.
+4. **Conflict Resolution Loop:** As the algorithm evaluates each generated interval, it performs two checks:
+   - **Leave Check:** Does this specific interval intersect with the start and end timestamps of any approved `DoctorLeave`? 
+   - **Booking Check:** Is this precise slot time already present in the retrieved array of existing appointments?
+5. **Output:** Only intervals that pass both conflict checks are returned to the frontend as `AVAILABLE` slots. 
+
+This approach guarantees that if a doctor suddenly requests an emergency half-day leave, the system instantly truncates their availability without requiring manual cancellation of unbooked slots. 
+
+---
+
+## 3. Resiliency: Notification Failure Handling & Retries
+
+Third-party integrations (such as Resend for emails or Twilio for SMS) are inherently subject to network latency, rate limits, and outages. Relying on synchronous execution for these services risks disrupting the core user experience—for instance, failing to book an appointment merely because the confirmation email timed out.
+
+### The Asynchronous `NotificationQueue`
+HealthSync decouples critical application logic from third-party communication using an asynchronous Queue pattern.
+
+1. **Task Enqueueing:** When an event occurs (e.g., an appointment is booked, rescheduled, or a waitlist slot opens), the system does not immediately send an email. Instead, it inserts a record into the `NotificationQueue` table with a status of `PENDING` and a `retryCount` of 0.
+2. **Cron Job Processor:** A Vercel-triggered Cron endpoint (`/api/cron/notifications`) runs at regular intervals. This endpoint queries the database for all notifications marked `PENDING` or `FAILED` where `retryCount < 3`.
+3. **Execution & Exponential Backoff Simulation:** The processor attempts to dispatch the queued messages via the respective third-party service provider. 
+   - **Success:** If the provider confirms receipt, the database record is updated to `SENT`.
+   - **Failure:** If the provider times out or throws an error, the catch block intercepts the failure. It updates the record status to `FAILED` and increments the `retryCount`. 
+4. **Resiliency:** Because the processor filters by `retryCount < 3`, a transient network failure will be automatically retried on the next cron execution. This ensures high deliverability of crucial medical reminders without impacting the performance of the main web threads. 
+
+By employing row-level database locks, dynamic algorithmic scheduling, and asynchronous queue processing, the HealthSync platform delivers a robust, secure, and highly available architecture capable of supporting modern clinical workflows.

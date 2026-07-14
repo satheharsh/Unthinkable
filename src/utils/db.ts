@@ -2,6 +2,7 @@ import { PrismaClient, Appointment } from '@prisma/client';
 import { BookAppointmentSchema } from '@/lib/validations';
 
 const prisma = new PrismaClient();
+export const db = prisma;
 
 /**
  * Safely books an appointment slot, avoiding race conditions.

@@ -1,16 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Activity, Loader2 } from "lucide-react";
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -31,11 +33,15 @@ export default function LoginPage() {
       } else {
         toast.success("Successfully logged in!");
         
-        // Redirect based on role (mock implementation for routing)
-        if (email.toLowerCase() === "patient@example.com") router.push("/patient/dashboard");
-        else if (email.toLowerCase() === "doctor@example.com") router.push("/doctor/dashboard");
-        else if (email.toLowerCase() === "admin@example.com") router.push("/admin/dashboard");
-        else router.push("/patient/dashboard");
+        if (callbackUrl && callbackUrl.startsWith("/")) {
+          router.push(callbackUrl);
+        } else {
+          // Redirect based on role (mock implementation for routing)
+          if (email.toLowerCase() === "patient@example.com") router.push("/patient/dashboard");
+          else if (email.toLowerCase() === "doctor@example.com") router.push("/doctor/dashboard");
+          else if (email.toLowerCase() === "admin@example.com") router.push("/admin/dashboard");
+          else router.push("/patient/dashboard");
+        }
       }
     } catch (error) {
       toast.error("An error occurred during login");
@@ -112,5 +118,13 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></div>}>
+      <LoginContent />
+    </Suspense>
   );
 }
