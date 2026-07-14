@@ -1,15 +1,32 @@
 import { NextResponse } from "next/server";
 import { db } from "@/utils/db";
 
-// Mock email/sms sending function
+import { Resend } from 'resend';
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+
 async function sendNotification(type: string, recipient: string, subject: string | null, message: string) {
+  if (type === "EMAIL") {
+    const { data, error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: recipient,
+      subject: subject || 'HealthSync Notification',
+      html: message,
+    });
+    if (error) {
+      throw new Error(`Resend Error: ${error.message}`);
+    }
+    return true;
+  }
+  
+  // SMS Mock
   console.log(`[Notification ${type}] To: ${recipient}`);
-  console.log(`Subject: ${subject || 'N/A'}`);
   console.log(`Message: ${message}`);
   
-  // Simulate random failure (20% chance) for demonstrating retry logic
-  if (Math.random() < 0.2) {
-    throw new Error("Simulated network timeout/failure");
+  // Simulate random failure (10% chance) for demonstrating SMS retry logic
+  if (Math.random() < 0.1) {
+    throw new Error("Simulated SMS network timeout/failure");
   }
   return true;
 }
